@@ -1,0 +1,21 @@
+# Fim de linha normalizado em LF — no repositório E no working tree.
+#
+# POR QUE: no Windows o `core.autocrlf=true` entrega os arquivos com CRLF na
+# cópia de trabalho, enquanto o Prettier grava LF (`endOfLine: "lf"`, o padrão).
+# O resultado era `npm run format:check` reprovando TODOS os arquivos do projeto
+# em máquinas Windows, sem nenhum problema real de formatação.
+#
+# `eol=lf` tem precedência sobre o core.autocrlf de cada dev, então o time
+# inteiro vê o mesmo conteúdo byte a byte, independente de sistema operacional.
+* text=auto eol=lf
+
+# Binários: nunca converter.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
