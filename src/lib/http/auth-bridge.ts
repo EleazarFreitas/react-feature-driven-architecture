@@ -8,8 +8,9 @@
  *
  * SOLUÇÃO — inversão de dependência:
  *   A camada HTTP declara aqui o que ela PRECISA (um contrato). Quem sabe
- *   cumprir esse contrato (o AuthProvider) se registra no boot. O `lib/http`
- *   nunca importa nada de `features/auth`; a seta aponta só num sentido.
+ *   cumprir esse contrato (a store de sessão, `features/auth/store/auth.store.ts`)
+ *   se registra no boot. O `lib/http` nunca importa nada de `features/auth`; a
+ *   seta aponta só num sentido.
  *
  * Isto é um módulo com estado global, o que normalmente evitamos. Aqui se
  * justifica: existe exatamente uma sessão por aba do navegador, e a alternativa
@@ -29,7 +30,7 @@ export interface AuthBridge {
   onSessionExpired: () => void
 }
 
-// Implementação neutra: é o que vale antes de o AuthProvider montar (e em
+// Implementação neutra: é o que vale até a store de sessão ser importada (e em
 // testes que não envolvem autenticação). Nunca é `null`, então o cliente HTTP
 // não precisa checar existência a cada requisição.
 const noopBridge: AuthBridge = {
@@ -40,7 +41,14 @@ const noopBridge: AuthBridge = {
 
 let bridge: AuthBridge = noopBridge
 
-/** Chamado uma vez pelo AuthProvider. Devolve a função de limpeza. */
+/**
+ * Chamado uma vez, no escopo de módulo da store de sessão — antes de qualquer
+ * componente montar, para não haver janela de requisição sem Authorization.
+ *
+ * Devolve uma função que restaura a ponte neutra. O app descarta esse retorno
+ * (a sessão dura o que dura a aba); quem o usa são os testes, para isolar um
+ * caso do outro — ver `client.test.ts`.
+ */
 export function registerAuthBridge(next: AuthBridge): () => void {
   bridge = next
   return () => {
