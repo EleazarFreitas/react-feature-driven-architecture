@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Env: NUNCA versione .env pessoal. Os .env.development/.env.production/.env.test
+# deste projeto contêm apenas configuração PÚBLICA (URL de API) e por isso são
+# versionados de propósito. Veja docs.md > Configuração de ambiente.
+.env
+.env*.local
+
+# Testes
+coverage
+
+# Ferramentas de IA / assistentes (config local de cada dev)
+.claude/
+.serena/
+
+# Temporários de build/dev
+*.tsbuildinfo
+vite.config.ts.timestamp-*
+.cache
+
+# Windows
+Thumbs.db
+desktop.ini

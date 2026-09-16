@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+/**
+ * POR QUE TAILWIND?
+ * O estilo fica junto do markup, então não existe o problema de "esta classe CSS
+ * ainda é usada?" nem de inventar nomes para cada div. Para um projeto pequeno
+ * com um time pequeno, é a opção com menos cerimônia — e nenhum CSS morto.
+ *
+ * O risco conhecido é markup ilegível (aquelas 20 classes numa linha). A defesa
+ * aqui é a de sempre: quando um padrão visual se repete, ele vira COMPONENTE
+ * (Button, Alert, Input) — não uma classe utilitária gigante copiada e colada.
+ *
+ * Alternativa descartada: CSS Modules. Funciona bem e não precisa de build extra,
+ * mas exigiria nomear e manter um arquivo .module.css por componente. Trade-off
+ * pequeno nos dois sentidos; o time deve escolher UM e ser consistente.
+ *
+ * Tailwind v4 não usa mais tailwind.config.js: o tema é configurado em CSS.
+ */
+
+@theme {
+  /* Cor de marca única, para não depender de um azul genérico espalhado. */
+  --color-brand-50: oklch(0.97 0.02 250);
+  --color-brand-100: oklch(0.93 0.04 250);
+  --color-brand-600: oklch(0.55 0.18 250);
+  --color-brand-700: oklch(0.48 0.17 250);
+}
+
+@layer base {
+  /*
+   * Acessibilidade: respeita quem configurou "reduzir movimento" no sistema
+   * operacional (usuários com sensibilidade vestibular).
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* O backdrop do <dialog> nativo. */
+  dialog::backdrop {
+    background: rgb(15 23 42 / 0.5);
+  }
+}
