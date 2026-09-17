@@ -41,7 +41,10 @@ const INITIAL_STATE: ImageUploadState = {
 interface UseImageUploadOptions {
   /** Chamado quando o upload termina; recebe a URL pública do arquivo. */
   onUploaded: (url: string) => void
-  /** Chamado ao remover a imagem. */
+  /**
+   * Chamado quando o valor deve ser zerado: remoção manual (`clear()`),
+   * arquivo reprovado na validação ou falha no upload.
+   */
   onCleared: () => void
 }
 

@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger'
  *
  *   - RouteErrorPage  → falhas ao renderizar uma rota (inclusive falha ao
  *                        carregar um chunk lazy, comum após um deploy novo);
- *   - ErrorBoundary   → falhas fora do router (o AuthProvider, por exemplo).
+ *   - ErrorBoundary   → falhas fora do router (o AuthGate, por exemplo).
  */
 export function RouteErrorPage() {
   const error: unknown = useRouteError()

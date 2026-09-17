@@ -29,7 +29,7 @@ interface RequestOptions {
   body?: unknown
   /** Query string. Valores `undefined` são omitidos — evita "?q=undefined". */
   params?: Record<string, string | number | boolean | undefined>
-  /** Permite cancelar a requisição (ver lib/query/useQuery.ts). */
+  /** Permite cancelar a requisição (ver o `useQuery` do TanStack Query). */
   signal?: AbortSignal
   /** Requisições públicas (ex.: login) não devem mandar Authorization. */
   skipAuth?: boolean
@@ -93,7 +93,7 @@ async function performRequest(path: string, options: RequestOptions): Promise<Re
     })
   } catch (error) {
     // Um cancelamento deliberado não é falha de rede: propagamos como está
-    // para que o chamador possa ignorá-lo (ver useQuery).
+    // para que o chamador possa ignorá-lo (ver o `useQuery` do TanStack Query).
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     throw new NetworkError(error)
   }
