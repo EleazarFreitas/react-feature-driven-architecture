@@ -164,9 +164,9 @@ src/
 │   └── guards/           RequireAuth, RequirePermission
 │
 ├── components/           UI compartilhada, SEM regra de negócio
-│   ├── ui/               Button, Input, Select, Alert, Badge, Spinner,
-│   │                     ConfirmDialog, Pagination, LinkButton,
-│   │                     FileDropzone, ProgressBar
+│   ├── ui/               Button, Field (Input, Textarea, Select), Alert,
+│   │                     Badge, Spinner, ConfirmDialog, Pagination,
+│   │                     LinkButton, FileDropzone, ProgressBar
 │   ├── feedback/         LoadingState, ErrorState, EmptyState, ErrorBoundary
 │   └── layout/           AppLayout (cabeçalho + navegação + <Outlet/>)
 │
@@ -2011,7 +2011,7 @@ SameSite`, access token curto em memória, rotação com detecção de reuso e
 11. **Testes E2E** (Playwright) nos fluxos críticos, quando houver backend real.
 12. **Acessibilidade auditada** com axe/Lighthouse, além das boas práticas já
     aplicadas.
-13. **Orçamento de bundle**: hoje o _chunk_ principal tem ~414 KB (~128 KB
+13. **Orçamento de bundle**: hoje o _chunk_ principal tem ~443 KB (~137 KB
     gzip), aceitável para um painel interno. Se crescer, investigue com
     `npx vite build --mode production` e um analisador de bundle.
 14. **Internacionalização**, se o público não for só de língua portuguesa. Hoje
@@ -2036,7 +2036,7 @@ npm run dev
 - [ ] `npm run dev` sobe e a aplicação abre em http://localhost:5173
 - [ ] `npm run lint` passa sem erros
 - [ ] `npm run typecheck` passa sem erros
-- [ ] `npm test` — 76 testes passando
+- [ ] `npm test` — 73 testes passando
 - [ ] `npm run build` gera `dist/` com os chunks separados por rota
 - [ ] `npm run preview` serve o build e rotas profundas funcionam
 - [ ] Login com `emilys` / `emilyspass` funciona
