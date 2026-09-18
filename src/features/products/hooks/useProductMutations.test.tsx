@@ -13,11 +13,11 @@ import { useCreateProduct, useDeleteProduct, useUpdateProduct } from './useProdu
 /**
  * Testes da INVALIDAÇÃO DE CACHE.
  *
- * Por que isto merece teste próprio: invalidação é a única parte da migração que
- * falha em SILÊNCIO. Se a chave estiver errada, nada quebra — a mutação continua
- * dando certo, a tela só para de se atualizar sozinha, e alguém descobre meses
- * depois reclamando que "precisa dar F5". Testar o contrato ("depois de gravar,
- * a listagem está marcada como obsoleta") trava esse comportamento.
+ * Por que isto merece teste próprio: invalidação é a parte que falha em
+ * SILÊNCIO. Se a chave estiver errada, nada quebra — a mutação continua dando
+ * certo, a tela só para de se atualizar sozinha, e alguém descobre meses
+ * depois reclamando que "precisa dar F5". Testar o contrato ("depois de
+ * gravar, a listagem está marcada como obsoleta") trava esse comportamento.
  *
  * Trabalhamos com o cache REAL (nada de espiar chamadas a `invalidateQueries`):
  * plantamos dados no cliente, rodamos a mutação contra o MSW e perguntamos ao

@@ -7,8 +7,7 @@ import { useAuthStore } from '../store/auth.store'
 /**
  * Resolve a sessão antes de deixar a aplicação renderizar.
  *
- * É o que sobrou do antigo AuthProvider — e a diferença é o ponto da migração:
- * ele não FORNECE nada (a store é global e acessível de qualquer lugar), apenas
+ * Ele não FORNECE nada (a store é global e acessível de qualquer lugar), apenas
  * cuida do momento do BOOT. Por isso é um componente pequeno e descartável, não
  * um provider do qual a árvore inteira depende.
  *

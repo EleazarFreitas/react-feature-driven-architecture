@@ -116,9 +116,9 @@ export function renderWithRouter(
 }
 
 /**
- * Mesma ordem do app/App.tsx — se ela mudar lá, muda aqui. Não há AuthProvider:
- * a sessão vive numa store global; o <AuthGate> apenas segura o render enquanto
- * o token é revalidado.
+ * Mesma ordem do app/App.tsx — se ela mudar lá, muda aqui. A sessão vive numa
+ * store global; o <AuthGate> apenas segura o render enquanto o token é
+ * revalidado.
  */
 function Providers({ queryClient, children }: { queryClient: QueryClient; children: ReactNode }) {
   return (

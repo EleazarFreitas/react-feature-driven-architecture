@@ -9,9 +9,8 @@ import { productKeys } from './product-keys'
  *
  * O MOTIVO DE ESTE ARQUIVO EXISTIR — INVALIDAÇÃO DE CACHE:
  * com um cache, um dado gravado com sucesso deixa desatualizado tudo o que
- * dependia dele. Antes, cada página resolvia isso na mão (ou não resolvia: a
- * lista só mostrava a mudança depois de um F5). Agora a regra "o que esta
- * operação torna obsoleto" mora ao lado da própria operação, uma vez só.
+ * dependia dele. A regra "o que esta operação torna obsoleto" mora ao lado da
+ * própria operação, uma vez só.
  *
  * `invalidateQueries` NÃO limpa o cache: marca as chaves como obsoletas e
  * refaz AGORA as que estiverem sendo observadas por alguma tela. Quem está na

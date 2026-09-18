@@ -3,9 +3,9 @@ import { LoadingState } from './LoadingState'
 /**
  * Carregamento que ocupa a tela inteira.
  *
- * Extraído quando o segundo caso de uso apareceu (o AuthGate verificando a
- * sessão e o router baixando o primeiro chunk). Antes disso era markup local —
- * é o critério de sempre: extrair quando a repetição existe de fato.
+ * Usado pelo AuthGate enquanto a sessão é verificada e pelo router enquanto o
+ * primeiro chunk carrega — extraído para não duplicar esse markup nos dois
+ * lugares.
  */
 export function FullPageLoading({ label }: { label: string }) {
   return (

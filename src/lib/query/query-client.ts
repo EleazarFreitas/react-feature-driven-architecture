@@ -5,11 +5,9 @@ import { isRetryable } from '@/lib/http/errors'
 /**
  * Configuração única do cache de ESTADO DE SERVIDOR (TanStack Query v5).
  *
- * Este arquivo substitui os hooks `useQuery`/`useMutation` escritos à mão que
- * viviam aqui. Eles resolviam loading/erro/cancelamento, mas pararam no limite
- * previsto na própria documentação deles: sem cache compartilhado, cada tela
- * refazia as mesmas requisições e uma mutação não tinha como avisar a lista de
- * que os dados mudaram. É exatamente o que a biblioteca resolve.
+ * Sem um cache compartilhado, cada tela repetiria as mesmas requisições e uma
+ * mutação não teria como avisar a lista de que os dados mudaram — é
+ * exatamente isso que a biblioteca resolve.
  *
  * O QUE GANHAMOS DE GRAÇA AO ADOTÁ-LA:
  *   - cache por chave, compartilhado entre telas (categorias são buscadas uma

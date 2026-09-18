@@ -11,31 +11,26 @@ import type { AuthStatus, AuthTokens, AuthUser, LoginCredentials } from '../type
 /**
  * Sessão do usuário — store global em Zustand.
  *
- * POR QUE SAÍMOS DO CONTEXT API:
- * O Context resolvia bem a distribuição do valor, mas trazia três custos que só
- * aparecem quando o app cresce:
+ * POR QUE A SESSÃO VIVE NUMA STORE ZUSTAND:
  *
- *   1. RE-RENDER EM BLOCO: todo consumidor de `useAuth()` re-renderizava quando
- *      QUALQUER campo mudava, porque o valor do Context é um objeto só. Com
- *      Zustand cada componente assina uma FATIA (`useAuthStore(s => s.user)`) e
- *      só re-renderiza quando aquela fatia muda;
- *   2. ESTADO PRESO À ÁRVORE: para ler a sessão fora de um componente (no
- *      cliente HTTP, por exemplo) era preciso guardar o valor num módulo à
- *      parte. Aqui `useAuthStore.getState()` funciona em qualquer lugar — é o
- *      que liga a store à camada HTTP no fim deste arquivo;
- *   3. PROVIDER + EFEITOS: a persistência do token era um service escrito à mão
- *      (`services/token-storage.ts`, agora removido). O middleware `persist` faz
- *      o mesmo, incluindo a leitura no boot, sem código nosso.
+ *   1. RE-RENDER POR FATIA: cada componente assina uma FATIA específica
+ *      (`useAuthStore(s => s.user)`) e só re-renderiza quando aquela fatia
+ *      muda, não quando qualquer campo da sessão muda;
+ *   2. ESTADO ACESSÍVEL FORA DA ÁRVORE: `useAuthStore.getState()` funciona em
+ *      qualquer lugar, inclusive fora de componentes — é o que liga a store à
+ *      camada HTTP no fim deste arquivo;
+ *   3. PERSISTÊNCIA DECLARATIVA: o middleware `persist` cuida de salvar e
+ *      reidratar o token, incluindo a leitura no boot, sem código adicional.
  *
- * O que NÃO mudou, de propósito: a máquina de estados `AuthStatus`, a decisão de
- * buscar o papel do usuário em /auth/me (o JWT da DummyJSON não traz `role`) e o
- * aviso de segurança sobre localStorage — ver types/auth.types.ts.
+ * A máquina de estados `AuthStatus`, a decisão de buscar o papel do usuário em
+ * /auth/me (o JWT da DummyJSON não traz `role`) e o aviso de segurança sobre
+ * localStorage ficam documentados em types/auth.types.ts.
  *
  * ⚠️ PERSISTÊNCIA E SEGURANÇA: o `persist` grava em `localStorage`, legível por
  * qualquer JavaScript da página. Num backend próprio, o refresh token deveria
  * vir em cookie HttpOnly e o access token ficar só em memória. A DummyJSON
  * devolve os dois no corpo da resposta, então esta é a única opção disponível
- * aqui — e o middleware apenas centraliza o que já fazíamos à mão.
+ * aqui.
  */
 
 interface AuthState {
@@ -75,8 +70,7 @@ const INITIAL_STATE = {
 let restoreInFlight: Promise<void> | null = null
 
 /**
- * Adaptador de `localStorage` à prova de ambiente — a única parte do antigo
- * `services/token-storage.ts` que valia a pena manter.
+ * Adaptador de `localStorage` à prova de ambiente.
  *
  * Duas razões para não entregar `window.localStorage` direto ao middleware:
  *   1. ele LANÇA EXCEÇÃO no modo privado de alguns navegadores e quando o
@@ -259,11 +253,10 @@ export function resetAuthStore(): void {
 /**
  * PONTE COM A CAMADA HTTP — registrada no escopo do módulo, não num efeito.
  *
- * Antes isso vivia num `useEffect` do AuthProvider, o que criava uma janela
- * (curta, mas real) em que uma requisição podia sair sem o header Authorization.
  * Como a store é um singleton que não depende da árvore React, o registro
  * acontece assim que este módulo é importado — ou seja, antes de qualquer
- * componente montar.
+ * componente montar. Isso evita a janela (curta, mas real) em que uma
+ * requisição poderia sair sem o header Authorization.
  *
  * A direção da dependência continua a mesma: `lib/http` declara o contrato e
  * nunca importa nada de `features/auth` (ver lib/http/auth-bridge.ts).

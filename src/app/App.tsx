@@ -22,10 +22,10 @@ import { router } from './router'
  *                          resposta definitiva, em vez de "ainda não sei"
  *         RouterProvider   a aplicação em si
  *
- * Repare no que NÃO existe mais aqui: o AuthProvider. A sessão agora vive numa
- * store Zustand (features/auth/store/auth.store.ts), que é global e não depende
- * da árvore React — por isso não há Provider para ela. O <AuthGate> não fornece
- * nada: ele só segura o render enquanto o token é revalidado.
+ * A sessão vive numa store Zustand (features/auth/store/auth.store.ts), que é
+ * global e não depende da árvore React — por isso não há Provider para ela. O
+ * <AuthGate> não fornece nada: ele só segura o render enquanto o token é
+ * revalidado.
  */
 export function App() {
   return (

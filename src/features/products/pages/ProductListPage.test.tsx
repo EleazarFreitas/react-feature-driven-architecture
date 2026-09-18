@@ -29,7 +29,7 @@ describe('ProductListPage', () => {
   it('mostra o carregamento e depois os produtos', async () => {
     renderList()
 
-    // Buscamos pelo TEXTO, e não por role="status": o AuthProvider também
+    // Buscamos pelo TEXTO, e não por role="status": o AuthGate também
     // renderiza um "Verificando sessão..." com esse mesmo role enquanto valida
     // o token, e findByRole devolveria o primeiro que encontrasse.
     expect(await screen.findByText(/carregando produtos/i)).toBeInTheDocument()

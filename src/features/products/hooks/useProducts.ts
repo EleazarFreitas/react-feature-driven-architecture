@@ -16,7 +16,7 @@ import { productKeys } from './product-keys'
  *
  * O `signal` que o TanStack Query entrega ao `queryFn` é repassado ao service e
  * daí ao `fetch`: quando o componente desmonta ou a chave muda, a requisição em
- * andamento é cancelada — o mesmo cuidado que o hook antigo tinha, agora de graça.
+ * andamento é cancelada.
  */
 
 export function useProducts(query: ProductQuery) {
@@ -27,8 +27,7 @@ export function useProducts(query: ProductQuery) {
     /**
      * Paginação sem piscar: ao trocar de página, a lista anterior continua na
      * tela (marcada como `isPlaceholderData`) enquanto a nova carrega, em vez de
-     * a tela inteira voltar ao estado de carregamento. É o comportamento que o
-     * hook antigo não tinha — ele zerava os dados a cada mudança de filtro.
+     * a tela inteira voltar ao estado de carregamento.
      */
     placeholderData: keepPreviousData,
   })
@@ -49,10 +48,8 @@ export function useProduct(id: number) {
  * Categorias são praticamente estáticas e usadas em duas telas (filtro e
  * formulário).
  *
- * ANTES: sem cache compartilhado, cada tela repetia a requisição. AGORA: a chave
- * é a mesma nas duas, então a segunda tela lê do cache — e o `staleTime` alto
- * evita revalidar um dado que quase nunca muda. Era exatamente este o "sinal de
- * adotar uma lib de server state" anotado na versão anterior deste arquivo.
+ * A chave é a mesma nas duas telas, então a segunda lê do cache — e o
+ * `staleTime` alto evita revalidar um dado que quase nunca muda.
  */
 export function useProductCategories() {
   return useQuery({
