@@ -44,3 +44,6 @@ vite.config.ts.timestamp-*
 # Windows
 Thumbs.db
 desktop.ini
+
+# Notas de estudo locais (rastreamento de fluxo)
+FLUXO-BUSCA-PRODUTOS.md
