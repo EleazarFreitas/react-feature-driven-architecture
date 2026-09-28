@@ -1,20 +1,26 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, type RenderResult } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ReactElement, ReactNode } from 'react'
-import { RouterProvider, createMemoryRouter, type RouteObject } from 'react-router-dom'
+import { http, HttpResponse } from 'msw'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 
+import { routes } from '@/app/router'
 import { AuthGate } from '@/features/auth/components/AuthGate'
 import { useAuthStore } from '@/features/auth/store/auth.store'
+import type { Role } from '@/features/auth/types/auth.types'
 
-import { makeJwt } from './fixtures'
+import { makeJwt, makeUser } from './fixtures'
+import { API_BASE } from './handlers'
+import { server } from './server'
 
 /**
  * Helpers de renderização.
  *
- * Sem eles, todo teste repetiria o mesmo empilhamento de Providers — e, pior,
- * cada um poderia montá-lo de um jeito diferente do que a aplicação real usa,
- * fazendo o teste validar uma árvore que não existe em produção.
+ * A suíte segue o "Testing Trophy": o grosso da confiança vem de testes de
+ * INTEGRAÇÃO que montam a aplicação de verdade — a mesma tabela de rotas, as
+ * mesmas guardas, o mesmo layout — e só trocam o servidor pelo MSW. Por isso há
+ * um único helper de tela, o `renderApp`: um teste que monta uma árvore feita
+ * sob medida valida uma aplicação que não existe em produção.
  */
 
 /**
@@ -43,87 +49,60 @@ export function createTestQueryClient(): QueryClient {
   })
 }
 
+interface RenderAppOptions {
+  /**
+   * Papel do usuário com sessão já salva. Omitido = visitante sem sessão.
+   *
+   * A sessão é semeada na store com `status: 'loading'` — o mesmo estado que a
+   * reidratação do `persist` produz num F5. Assim o <AuthGate> busca /auth/me
+   * e é o caminho REAL de restauração de sessão que roda em todo teste. O papel
+   * sai da resposta desse /auth/me, como na API de verdade.
+   */
+  as?: Role
+  /** Opções do userEvent (ex.: `{ applyAccept: false }` no upload). */
+  userOptions?: Parameters<typeof userEvent.setup>[0]
+}
+
 /**
- * Coloca tokens na store ANTES de renderizar, simulando "usuário que já tinha
- * sessão". O `status: 'loading'` é o mesmo estado que a reidratação do `persist`
- * produz num F5 — então o <AuthGate> vai buscar /auth/me e é esse caminho real
- * de restauração de sessão que os testes exercitam.
+ * Renderiza a aplicação inteira numa URL.
  *
- * Mexer na store (e não no localStorage) mantém o helper imune a mudanças no
- * formato da persistência: o `persist` grava sozinho em seguida.
+ * Usa `createMemoryRouter` (o jsdom não tem a API de histórico do navegador)
+ * com a MESMA tabela exportada por app/router.tsx. As páginas são `lazy`, então
+ * os testes esperam com `findBy*`.
  */
-export function seedAuthenticatedSession(): void {
-  useAuthStore.setState({
-    tokens: { accessToken: makeJwt(), refreshToken: makeJwt(86400) },
-    status: 'loading',
-    user: null,
-  })
-}
+export function renderApp(
+  route: string,
+  { as, userOptions }: RenderAppOptions = {},
+): RenderResult & { user: ReturnType<typeof userEvent.setup> } {
+  if (as !== undefined) {
+    // Mexer na store (e não no localStorage) mantém o helper imune a mudanças
+    // no formato da persistência: o `persist` grava sozinho em seguida.
+    useAuthStore.setState({
+      tokens: { accessToken: makeJwt(), refreshToken: makeJwt(86400) },
+      status: 'loading',
+      user: null,
+    })
+    // O handler padrão de /auth/me já devolve um admin. Só sobrescrevemos para
+    // os outros papéis — o que deixa um teste de admin livre para instalar o
+    // próprio /auth/me (ex.: um 401) antes de chamar o renderApp.
+    if (as !== 'admin') {
+      server.use(http.get(`${API_BASE}/auth/me`, () => HttpResponse.json(makeUser(as))))
+    }
+  }
 
-interface RenderWithProvidersOptions {
-  /** Rota inicial. Use para testar páginas que leem parâmetros da URL. */
-  route?: string
-  /** Permite inspecionar/pré-popular o cache num teste específico. */
-  queryClient?: QueryClient
-}
-
-type RenderWithProvidersResult = RenderResult & {
-  user: ReturnType<typeof userEvent.setup>
-  queryClient: QueryClient
-}
-
-/**
- * Renderiza uma árvore dentro dos providers da aplicação (memória em vez de
- * história real do navegador, que não existe no jsdom).
- */
-export function renderWithProviders(
-  ui: ReactElement,
-  { route = '/', queryClient = createTestQueryClient() }: RenderWithProvidersOptions = {},
-): RenderWithProvidersResult {
-  const routes: RouteObject[] = [
-    { path: '*', element: <Providers queryClient={queryClient}>{ui}</Providers> },
-  ]
   const router = createMemoryRouter(routes, { initialEntries: [route] })
 
   return {
     // `userEvent` simula interação de verdade (foco, teclas, eventos na ordem
     // correta) — mais próximo do usuário real do que `fireEvent`.
-    user: userEvent.setup(),
-    queryClient,
-    ...render(<RouterProvider router={router} />),
-  }
-}
-
-/**
- * Renderiza uma árvore de ROTAS completa, para testar navegação, guardas e
- * redirecionamentos — coisas que só existem quando há mais de uma rota.
- */
-export function renderWithRouter(
-  routes: RouteObject[],
-  { route = '/', queryClient = createTestQueryClient() }: RenderWithProvidersOptions = {},
-): RenderWithProvidersResult {
-  const router = createMemoryRouter(routes, { initialEntries: [route] })
-
-  return {
-    user: userEvent.setup(),
-    queryClient,
+    user: userEvent.setup(userOptions),
+    // Mesma ordem de providers do app/App.tsx — se ela mudar lá, muda aqui.
     ...render(
-      <Providers queryClient={queryClient}>
-        <RouterProvider router={router} />
-      </Providers>,
+      <QueryClientProvider client={createTestQueryClient()}>
+        <AuthGate>
+          <RouterProvider router={router} />
+        </AuthGate>
+      </QueryClientProvider>,
     ),
   }
-}
-
-/**
- * Mesma ordem do app/App.tsx — se ela mudar lá, muda aqui. A sessão vive numa
- * store global; o <AuthGate> apenas segura o render enquanto o token é
- * revalidado.
- */
-function Providers({ queryClient, children }: { queryClient: QueryClient; children: ReactNode }) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AuthGate>{children}</AuthGate>
-    </QueryClientProvider>
-  )
 }

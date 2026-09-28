@@ -18,10 +18,10 @@ import { makeJwt, makeProduct, makeUser } from './fixtures'
  * A URL base vem de `.env.test` (VITE_API_BASE_URL=https://dummyjson.test).
  */
 
-const BASE = 'https://dummyjson.test'
+export const API_BASE = 'https://dummyjson.test'
 
 /** Serviço de upload — outra API, outra base URL (ver .env.test). */
-const UPLOAD_BASE = 'https://upload.test/api/v1'
+export const UPLOAD_BASE = 'https://upload.test/api/v1'
 
 /** Credenciais aceitas pelos handlers padrão. */
 export const VALID_CREDENTIALS = { username: 'emilys', password: 'emilyspass' }
@@ -29,7 +29,7 @@ export const VALID_CREDENTIALS = { username: 'emilys', password: 'emilyspass' }
 export const handlers = [
   // POST /auth/login — espelha o comportamento real: 400 + { message } quando
   // as credenciais não batem.
-  http.post(`${BASE}/auth/login`, async ({ request }) => {
+  http.post(`${API_BASE}/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { username?: string; password?: string }
 
     if (
@@ -43,7 +43,7 @@ export const handlers = [
   }),
 
   // GET /auth/me — exige o Bearer token, como a API real.
-  http.get(`${BASE}/auth/me`, ({ request }) => {
+  http.get(`${API_BASE}/auth/me`, ({ request }) => {
     const authorization = request.headers.get('Authorization')
 
     if (authorization === null) {
@@ -53,12 +53,12 @@ export const handlers = [
     return HttpResponse.json(makeUser('admin'))
   }),
 
-  http.post(`${BASE}/auth/refresh`, () =>
+  http.post(`${API_BASE}/auth/refresh`, () =>
     HttpResponse.json({ accessToken: makeJwt(), refreshToken: makeJwt(86400) }),
   ),
 
   // GET /products — devolve o mesmo envelope da DummyJSON.
-  http.get(`${BASE}/products`, () =>
+  http.get(`${API_BASE}/products`, () =>
     HttpResponse.json({
       products: [
         makeProduct({ id: 1, title: 'Notebook Pro 14' }),
@@ -70,7 +70,7 @@ export const handlers = [
     }),
   ),
 
-  http.get(`${BASE}/products/search`, ({ request }) => {
+  http.get(`${API_BASE}/products/search`, ({ request }) => {
     const term = new URL(request.url).searchParams.get('q') ?? ''
 
     // Termo que não existe devolve lista vazia com total 0 — é o que a API real
@@ -87,11 +87,11 @@ export const handlers = [
     })
   }),
 
-  http.get(`${BASE}/products/category-list`, () =>
+  http.get(`${API_BASE}/products/category-list`, () =>
     HttpResponse.json(['laptops', 'smartphones', 'beauty']),
   ),
 
-  http.get(`${BASE}/products/:id`, ({ params }) => {
+  http.get(`${API_BASE}/products/:id`, ({ params }) => {
     const id = Number(params.id)
 
     if (id === 999) {
@@ -102,17 +102,17 @@ export const handlers = [
   }),
 
   // POST/PUT ecoam os campos recebidos + id, como a API real (que não persiste).
-  http.post(`${BASE}/products/add`, async ({ request }) => {
+  http.post(`${API_BASE}/products/add`, async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>
     return HttpResponse.json({ ...body, id: 195 }, { status: 201 })
   }),
 
-  http.put(`${BASE}/products/:id`, async ({ request, params }) => {
+  http.put(`${API_BASE}/products/:id`, async ({ request, params }) => {
     const body = (await request.json()) as Record<string, unknown>
     return HttpResponse.json({ ...body, id: Number(params.id) })
   }),
 
-  http.delete(`${BASE}/products/:id`, ({ params }) =>
+  http.delete(`${API_BASE}/products/:id`, ({ params }) =>
     HttpResponse.json({ ...makeProduct({ id: Number(params.id) }), isDeleted: true }),
   ),
 

@@ -2,120 +2,85 @@ import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
-import { makeUser } from '@/test/fixtures'
+import { API_BASE } from '@/test/handlers'
 import { server } from '@/test/server'
-import { renderWithRouter, seedAuthenticatedSession } from '@/test/test-utils'
-
-import { ProductDetailPage } from './ProductDetailPage'
-
-const BASE = 'https://dummyjson.test'
+import { renderApp } from '@/test/test-utils'
 
 /**
- * Testes do detalhe do produto.
- *
- * Cobrem o que a listagem não cobre: parâmetro de rota, ação destrutiva com
- * confirmação e a diferença entre um erro que permite nova tentativa (500) e um
- * que não permite (404).
+ * Detalhe do produto: parâmetro de rota, ações por papel e a exclusão com
+ * confirmação — incluindo a volta para a listagem REAL com o aviso.
  */
 
-function renderDetail(route = '/products/1') {
-  seedAuthenticatedSession()
-
-  return renderWithRouter(
-    [
-      { path: '/products/:id', element: <ProductDetailPage /> },
-      { path: '/products', element: <h1>Lista de produtos</h1> },
-    ],
-    { route },
-  )
-}
-
-describe('ProductDetailPage', () => {
+describe('detalhe do produto', () => {
   it('carrega o produto usando o id da URL', async () => {
-    renderDetail('/products/42')
+    renderApp('/products/42', { as: 'admin' })
 
     expect(await screen.findByRole('heading', { name: 'Notebook Pro 14' })).toBeInTheDocument()
-
-    // Confere a formatação de moeda e de percentual na tela real.
+    // Formatação de moeda na tela real.
     expect(screen.getByText(/1\.299,99/)).toBeInTheDocument()
   })
 
-  it('mostra erro sem "tentar novamente" quando o produto não existe', async () => {
-    renderDetail('/products/999')
+  it.each([
+    // 404 não é recuperável: repetir daria o mesmo resultado, então oferecer
+    // "tentar novamente" seria enganar o usuário (ver isRetryable).
+    { route: '/products/999', message: /não encontrado/i },
+    // Id inválido nem chega à API — se chegasse, o MSW falharia o teste por
+    // requisição sem handler.
+    { route: '/products/abc', message: /id válido/i },
+  ])('mostra erro sem "tentar novamente" em $route', async ({ route, message }) => {
+    renderApp(route, { as: 'admin' })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/não encontrado/i)
-
-    // 404 não é recuperável: repetir daria o mesmo resultado. Oferecer o botão
-    // seria enganar o usuário (ver isRetryable em lib/http/errors).
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(screen.queryByRole('button', { name: /tentar novamente/i })).not.toBeInTheDocument()
   })
 
-  it('recusa um id que não é número sem chamar a API', async () => {
-    // Se a requisição fosse feita, o MSW falharia o teste por rota inesperada.
-    renderDetail('/products/abc')
+  it.each([
+    { as: 'moderator', canEdit: true },
+    { as: 'user', canEdit: false },
+  ] as const)('só oferece as ações permitidas ao papel $as', async ({ as, canEdit }) => {
+    renderApp('/products/1', { as })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/id válido/i)
+    await screen.findByRole('heading', { name: 'Notebook Pro 14' })
+
+    // Exclusão é só do admin: o moderador edita, o somente leitura nem isso.
+    expect(screen.queryAllByRole('link', { name: 'Editar' })).toHaveLength(canEdit ? 1 : 0)
+    expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
   })
 
-  it('pede confirmação antes de excluir e só então chama a API', async () => {
+  it('pede confirmação antes de excluir e volta para a lista com o aviso', async () => {
     let deleteCalled = false
     server.use(
-      http.delete(`${BASE}/products/:id`, () => {
+      http.delete(`${API_BASE}/products/:id`, () => {
         deleteCalled = true
         return HttpResponse.json({ id: 1, isDeleted: true })
       }),
     )
 
-    const { user } = renderDetail()
+    const { user } = renderApp('/products/1', { as: 'admin' })
 
     await user.click(await screen.findByRole('button', { name: 'Excluir' }))
 
     // A exclusão NÃO pode acontecer só por clicar no botão da tela.
     expect(deleteCalled).toBe(false)
 
+    // `within`: agora há DOIS botões "Excluir" — o da página e o do diálogo.
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent(/tem certeza/i)
-
-    // Confirma no diálogo. Usamos `within` porque existem DOIS botões
-    // "Excluir" na tela agora: o da página e o do diálogo.
     await user.click(within(dialog).getByRole('button', { name: 'Excluir' }))
 
-    // Depois de excluir, volta para a lista com o aviso de que a API simula.
-    expect(await screen.findByRole('heading', { name: /lista de produtos/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Produtos' })).toBeInTheDocument()
+    expect(screen.getByText(/exclusão enviada com sucesso/i)).toBeInTheDocument()
     expect(deleteCalled).toBe(true)
-  })
-
-  it('não oferece exclusão ao moderador', async () => {
-    server.use(http.get(`${BASE}/auth/me`, () => HttpResponse.json(makeUser('moderator'))))
-
-    renderDetail()
-
-    await screen.findByRole('heading', { name: 'Notebook Pro 14' })
-
-    // Moderador edita, mas não exclui.
-    expect(screen.getByRole('link', { name: 'Editar' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
-  })
-
-  it('não oferece nenhuma ação de escrita ao papel somente leitura', async () => {
-    server.use(http.get(`${BASE}/auth/me`, () => HttpResponse.json(makeUser('user'))))
-
-    renderDetail()
-
-    await screen.findByRole('heading', { name: 'Notebook Pro 14' })
-
-    expect(screen.queryByRole('link', { name: 'Editar' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
   })
 
   it('mostra o erro e mantém o usuário na página quando a exclusão falha', async () => {
     server.use(
-      http.delete(`${BASE}/products/:id`, () =>
+      http.delete(`${API_BASE}/products/:id`, () =>
         HttpResponse.json({ message: 'Erro interno' }, { status: 500 }),
       ),
     )
 
-    const { user } = renderDetail()
+    const { user } = renderApp('/products/1', { as: 'admin' })
 
     await user.click(await screen.findByRole('button', { name: 'Excluir' }))
     await user.click(
@@ -124,6 +89,6 @@ describe('ProductDetailPage', () => {
 
     // Sem feedback, o usuário acharia que o clique não fez nada.
     expect(await screen.findByText(/api está indisponível/i)).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /lista de produtos/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Notebook Pro 14' })).toBeInTheDocument()
   })
 })

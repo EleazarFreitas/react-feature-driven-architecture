@@ -1218,16 +1218,27 @@ npm run test:watch    # modo observador (use enquanto desenvolve)
 npm test -- client    # só os arquivos que casam com "client"
 ```
 
-**73 testes em 11 arquivos**, todos passando.
+**47 testes em 9 arquivos**, todos passando.
 
-### Os tipos de teste
+### A forma da suíte: o "Testing Trophy"
 
-| Tipo              | O que é                             | Exemplo aqui                                |
-| ----------------- | ----------------------------------- | ------------------------------------------- |
-| **Unitário**      | Uma função pura, sem dependências   | `permissions.test.ts`, `format.test.ts`     |
-| **De componente** | Um componente isolado, via props    | `ProductForm.test.tsx`                      |
-| **De hook**       | Lógica de um hook com `renderHook`  | `useProductMutations.test.tsx`              |
-| **De integração** | Várias peças juntas, com rede falsa | `auth.test.tsx`, `ProductListPage.test.tsx` |
+A maior parte da confiança vem de testes de **integração**, que montam a
+aplicação de verdade e só trocam o servidor pelo MSW. Testes unitários ficam
+para o que é lógica pura ou difícil de provocar pela tela. Não há E2E (ver o
+fim desta seção).
+
+| Camada         | O que exercita                                       | Arquivos                                                                                               |
+| -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Integração** | A aplicação inteira numa URL: rotas, guardas, telas  | `auth.test.tsx`, `ProductListPage.test.tsx`, `ProductDetailPage.test.tsx`, `ProductFormPages.test.tsx` |
+| **Unitário**   | Funções puras e peças cujos casos a tela não alcança | `permissions.test.ts`, `format.test.ts`, `client.test.ts`, `upload.test.ts`                            |
+| **De hook**    | Regra de negócio de um hook, com `renderHook`        | `useProductMutations.test.tsx`                                                                         |
+
+Os testes de integração usam **um único helper**, `renderApp(url, { as })`, que
+monta a **mesma** tabela de rotas exportada por `app/router.tsx`. Nenhum teste
+monta uma árvore de rotas sob medida nem renderiza um componente isolado via
+props: isso validaria uma aplicação que não existe em produção. Por isso
+`<ProductForm>` e `<ProductImageField>` não têm arquivo próprio — são testados
+pelas páginas de criar e editar, que são o jeito real de usá-los.
 
 ### O princípio: teste comportamento, não implementação
 
@@ -1249,36 +1260,35 @@ teste** — nenhum teste depende da internet.
 
 ### O que está coberto
 
-- **Tabela de rotas real** (7): redirecionamento sem sessão, raiz → produtos,
-  detalhe com id da URL, `/products/new` tratado como rota estática (e não como
-  um id), 403 por falta de permissão, 404 fora da área autenticada. Estes testes
-  montam a **mesma** tabela exportada por `app/router.tsx` — os demais usam
-  tabelas pequenas feitas sob medida, o que deixava o router real sem cobertura.
-- **Cliente HTTP** (9): header de autenticação, `skipAuth`, `HttpError`,
-  `NetworkError`, refresh no 401 + repetição, _single-flight_ (um só refresh para
-  várias requisições), sem loop infinito, query string sem `undefined`.
-- **Autenticação** (9): redirecionamento da rota protegida, login levando ao
-  destino original, credenciais inválidas, validação de campos, restauração de
-  sessão (F5), token inválido, permissão negada → 403, permissão concedida, logout.
-- **Listagem** (6): loading, vazio, erro + tentar novamente, ação de criar
-  visível/escondida por papel, filtros da URL virando parâmetros da API.
-- **Detalhe** (7): id da URL, 404 sem retry, id inválido sem chamar a API,
-  confirmação antes de excluir, papéis, erro na exclusão.
-- **Formulário** (9): campos obrigatórios, preço vazio, preço negativo,
-  conversão para número, valores iniciais, botão desabilitado durante envio,
-  envio bloqueado enquanto a imagem sobe, erro da API sem perder o digitado,
-  acessibilidade das mensagens.
+- **Autenticação e guardas** (7): visitante vai ao login e, depois de entrar,
+  volta à rota que tentou abrir; validação dos campos e credenciais inválidas
+  (sem chamar a API com o formulário vazio); restauração de sessão (F5) e
+  logout; token expirado com refresh falhando → login com aviso; 403 para o
+  papel somente leitura em criar e editar; 404 fora da área autenticada.
+- **Listagem** (4): carregando → produtos; ação de criar por papel; busca de
+  ponta a ponta (campo → debounce → URL → parâmetros da API → vazio → "Limpar
+  filtros" → catálogo de volta); erro + tentar novamente.
+- **Detalhe** (7): id da URL; 404 e id inválido sem "tentar novamente"; ações
+  por papel; confirmação antes de excluir, voltando à lista com o aviso; erro
+  na exclusão.
+- **Criar e editar** (8): criação completa com upload (prévia local, "Salvar"
+  bloqueado enquanto a imagem sobe, números e URL da imagem no corpo enviado);
+  validação e acessibilidade das mensagens, sem chamar a API; erro da API sem
+  perder o digitado; imagem grande ou de formato inválido recusada **sem chamar
+  a rede**; falha no upload; remoção com liberação do object URL; edição
+  partindo dos dados atuais e mantendo a imagem existente.
+- **Cliente HTTP** (5): `skipAuth`; `HttpError` e `NetworkError`;
+  _single-flight_ (um só refresh para várias requisições com 401, e todas
+  repetidas); sem loop infinito quando o 401 persiste; query string sem
+  `undefined`. O header `Authorization` e o refresh que falha já são exercitados
+  pelos testes de autenticação.
+- **Upload** (4): corpo multipart com o campo `file` e `Content-Type` gerado
+  pelo navegador **com boundary**; erro HTTP e resposta em formato inesperado
+  viram `HttpError`; cancelamento.
 - **Invalidação de cache** (3): depois de criar, editar e excluir, as chaves
   certas ficam marcadas como obsoletas — e a do produto excluído **não** é
   rebuscada. É a única parte da camada de dados que falha em silêncio: com a
   chave errada, tudo continua "funcionando", a tela só para de se atualizar.
-- **Upload** (6): corpo multipart com o campo `file`; o `Content-Type` é gerado
-  pelo navegador **com boundary** (e não definido à mão); erro HTTP vira
-  `HttpError`; resposta em formato inesperado é recusada; cancelamento.
-- **Campo de imagem** (8): envia e entrega a URL ao formulário; prévia local
-  imediata; recusa arquivo grande **sem chamar a rede**; recusa formato inválido;
-  erro ligado ao campo por `aria-describedby`; falha de upload; remoção com
-  liberação do object URL; aviso de "enviando" para o formulário.
 - **Permissões** (4) e **formatação** (5).
 
 ### O que NÃO vale a pena testar
@@ -1296,12 +1306,15 @@ não vale um teste.
 1. Crie o arquivo **ao lado do código**: `MinhaCoisa.test.tsx`.
 2. Precisa de rede? Use os handlers padrão de `src/test/handlers.ts`, ou
    sobrescreva só para o seu caso com `server.use(...)`.
-3. Precisa de sessão? Chame `seedAuthenticatedSession()` — ele semeia os tokens
-   na store, reproduzindo o mesmo caminho de um F5.
-4. Renderize com `renderWithProviders` (uma tela) ou `renderWithRouter` (várias
-   rotas, para testar navegação e guardas). Os dois montam um `QueryClient`
-   **novo a cada teste**: compartilhar o cache faria um teste servir dado ao
-   seguinte, sem tocar no MSW, e a ordem de execução passaria a importar.
+3. Renderize com `renderApp('/sua/rota', { as: 'admin' })`. O `as` semeia uma
+   sessão com o papel indicado, reproduzindo o mesmo caminho de um F5 (o
+   `<AuthGate>` valida o token em `/auth/me`); sem ele, o teste começa como
+   visitante. O helper monta um `QueryClient` **novo a cada teste**:
+   compartilhar o cache faria um teste servir dado ao seguinte, sem tocar no
+   MSW, e a ordem de execução passaria a importar.
+4. Prefira um teste que percorra o caminho do usuário (digita, clica, vê o
+   resultado) a vários testes de um passo só. Teste unitário só para função
+   pura ou para o caso que a tela não consegue provocar.
 5. Busque elementos por **papel acessível** (`getByRole`) ou **rótulo**
    (`getByLabelText`), não por classe CSS. Se não achar por papel, geralmente a
    acessibilidade está faltando — o teste acabou de encontrar um bug real.
@@ -2036,7 +2049,7 @@ npm run dev
 - [ ] `npm run dev` sobe e a aplicação abre em http://localhost:5173
 - [ ] `npm run lint` passa sem erros
 - [ ] `npm run typecheck` passa sem erros
-- [ ] `npm test` — 73 testes passando
+- [ ] `npm test` — 47 testes passando
 - [ ] `npm run build` gera `dist/` com os chunks separados por rota
 - [ ] `npm run preview` serve o build e rotas profundas funcionam
 - [ ] Login com `emilys` / `emilyspass` funciona
