@@ -58,7 +58,7 @@ pública necessária.
 | `npm run dev`          | Servidor de desenvolvimento           |
 | `npm run build`        | Checa tipos e gera o build em `dist/` |
 | `npm run preview`      | Serve o build de produção             |
-| `npm test`             | Roda os testes (73)                   |
+| `npm test`             | Roda os testes (47)                   |
 | `npm run test:watch`   | Testes em modo observador             |
 | `npm run lint`         | ESLint                                |
 | `npm run lint:fix`     | ESLint corrigindo o automatizável     |
@@ -79,7 +79,8 @@ pública necessária.
 - **Upload de imagem** com arrastar-e-soltar, prévia, barra de progresso real
   (via XHR, porque `fetch` não reporta progresso de envio) e validação
 - **Estado no lugar certo**: local, na URL, global, de servidor e derivado
-- **73 testes** de comportamento, com a rede interceptada pelo MSW
+- **47 testes** de comportamento, quase todos de integração sobre a aplicação
+  real, com a rede interceptada pelo MSW
 
 ## Estrutura
 

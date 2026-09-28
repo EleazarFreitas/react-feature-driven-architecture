@@ -2,44 +2,32 @@ import { describe, expect, it } from 'vitest'
 
 import { makeUser } from '@/test/fixtures'
 
-import { can } from './permissions'
+import { can, type Permission } from './permissions'
 
 /**
- * Teste unitário puro: função sem dependências, sem React, sem rede.
- *
- * Regra de autorização é exatamente o tipo de código que compensa testar assim
- * — é uma tabela de decisão, e uma tabela se verifica exaustivamente em poucas
- * linhas. Cobrir isso pela interface exigiria renderizar três telas diferentes.
+ * Teste unitário puro: regra de autorização é uma tabela de decisão, e uma
+ * tabela se verifica exaustivamente em poucas linhas. Pela interface, isso
+ * exigiria renderizar três telas diferentes por papel — os testes das páginas
+ * só confirmam que a tabela está LIGADA aos botões.
  */
+
+const ALL: Permission[] = ['product:create', 'product:update', 'product:delete']
+
 describe('can()', () => {
-  it('permite tudo para o administrador', () => {
-    const admin = makeUser('admin')
-
-    expect(can(admin, 'product:create')).toBe(true)
-    expect(can(admin, 'product:update')).toBe(true)
-    expect(can(admin, 'product:delete')).toBe(true)
-  })
-
-  it('permite criar e editar, mas não excluir, para o moderador', () => {
-    const moderator = makeUser('moderator')
-
-    expect(can(moderator, 'product:create')).toBe(true)
-    expect(can(moderator, 'product:update')).toBe(true)
+  it.each([
+    { role: 'admin', allowed: ALL },
     // A distinção que justifica o papel existir: exclusão é irreversível.
-    expect(can(moderator, 'product:delete')).toBe(false)
-  })
+    { role: 'moderator', allowed: ['product:create', 'product:update'] },
+    { role: 'user', allowed: [] },
+  ] as const)('libera ao papel $role exatamente as permissões dele', ({ role, allowed }) => {
+    const user = makeUser(role)
 
-  it('não permite nenhuma escrita para o papel somente leitura', () => {
-    const reader = makeUser('user')
-
-    expect(can(reader, 'product:create')).toBe(false)
-    expect(can(reader, 'product:update')).toBe(false)
-    expect(can(reader, 'product:delete')).toBe(false)
+    expect(ALL.filter((permission) => can(user, permission))).toEqual(allowed)
   })
 
   it('não permite nada quando não há usuário', () => {
-    // Caso de borda que importa: durante o logout o usuário vira null por um
-    // instante, e a interface não pode oferecer ações nesse meio-tempo.
-    expect(can(null, 'product:create')).toBe(false)
+    // Durante o logout o usuário vira null por um instante, e a interface não
+    // pode oferecer ações nesse meio-tempo.
+    expect(ALL.some((permission) => can(null, permission))).toBe(false)
   })
 })
