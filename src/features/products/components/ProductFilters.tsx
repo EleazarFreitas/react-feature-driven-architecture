@@ -63,10 +63,18 @@ export function ProductFilters({ filters, categories, isLoadingCategories }: Pro
     setTerm(query.search)
   }
 
-  // Caminho campo → URL: empurra o termo quando o usuário para de digitar.
+  /**
+   * Caminho campo → URL: empurra o termo quando o usuário para de digitar.
+   *
+   * `debouncedTerm === term` é o que define "parou de digitar" — e é também o
+   * que impede este efeito de DESFAZER uma mudança vinda de fora. Sem essa
+   * condição, ao clicar em "Limpar filtros" a URL ficava sem busca, o campo
+   * voltava a "", mas o valor com debounce ainda era o termo antigo: o efeito
+   * via a diferença e gravava a busca de volta na URL.
+   */
   useEffect(() => {
-    if (debouncedTerm !== query.search) setSearch(debouncedTerm)
-  }, [debouncedTerm, query.search, setSearch])
+    if (debouncedTerm === term && debouncedTerm !== query.search) setSearch(debouncedTerm)
+  }, [debouncedTerm, term, query.search, setSearch])
 
   const isSearching = query.search !== ''
 
