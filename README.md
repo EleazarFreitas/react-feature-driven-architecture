@@ -79,7 +79,7 @@ pública necessária.
   erro (com nova tentativa), vazio e sucesso
 - **Formulários** com validação, acessibilidade e proteção contra envio duplo
 - **Upload de imagem** com arrastar-e-soltar, prévia, barra de progresso real
-  (via XHR, porque `fetch` não reporta progresso de envio) e validação
+  (via XHR, porque `fetch` não tem evento de progresso de envio) e validação
 - **Estado no lugar certo**: local, na URL, global, de servidor e derivado
 - **50 testes** de comportamento, quase todos de integração sobre a aplicação
   real, com a rede interceptada pelo MSW
@@ -94,7 +94,7 @@ src/
 ├── features/     auth/ e products/ — o coração do projeto
 ├── hooks/        Hooks genéricos
 ├── lib/          HTTP, server state, log, formatação
-├── pages/        Telas transversais (404, 403)
+├── pages/        Telas transversais (404, 403, erro de rota)
 └── test/         Infraestrutura de teste
 ```
 

@@ -432,8 +432,9 @@ cada F5.
 
 Por que um loader e não um componente com `useEffect`? Porque resolver a sessão
 não é assunto de render: é um passo que precisa acontecer **antes** dele. Um
-loader é uma função comum, roda uma vez por navegação inicial (sem a chamada
-dupla do `StrictMode`), e se lançar erro cai no `errorElement` da rota.
+loader é uma função comum, aqui roda uma única vez, no boot (sem a chamada dupla
+que o `StrictMode` faz com efeitos), e se lançar erro cai no `errorElement` da
+rota.
 
 > **Trade-off assumido:** qualquer falha em `/auth/me` encerra a sessão — até
 > uma queda de rede bem na hora do F5. É a política mais simples e nunca deixa
@@ -610,7 +611,8 @@ conteúdo da API —, o atacante rouba o token e usa a sessão de fora.
 
 **Por que usamos assim mesmo:** um cookie `HttpOnly` é invisível para o
 JavaScript, e **só o servidor pode criá-lo**. A DummyJSON devolve o token no
-corpo JSON da resposta. Para uma SPA sem backend próprio, não há alternativa.
+corpo JSON da resposta. Para uma SPA sem backend próprio, a única alternativa
+seria guardar só em memória — e pedir login de novo a cada F5.
 
 > Este projeto usa `localStorage` por limitação da API pública, para fins
 > didáticos. **Não** é o padrão seguro de produção.
@@ -654,9 +656,14 @@ As rotas são **aninhadas**, e as guardas são rotas-mãe que renderizam
   /login                   pública
   <RequireAuth>            ← exige sessão para tudo abaixo
     <AppLayout>            ← cabeçalho e navegação
+      /                    redireciona para /products
       /products
       <RequirePermission permission="product:create">
         /products/new
+      /products/:id
+      <RequirePermission permission="product:update">
+        /products/:id/edit
+      /403
   *                        404
 ```
 
@@ -666,6 +673,13 @@ protegida**. Não existe o risco de esquecer de embrulhá-la numa guarda.
 As guardas são **componentes que leem a store**, então são reativas: quando a
 sessão muda (logout, expiração), elas re-renderizam e redirecionam sem ninguém
 chamar `navigate`.
+
+`RequireAuth` guarda o destino original (caminho + query string) em
+`location.state` antes de redirecionar, para que o login devolva o usuário
+exatamente onde ele tentou entrar.
+
+O `404` fica **fora** do `RequireAuth` de propósito: uma URL inexistente é 404
+mesmo sem sessão. Mandar para o login quem digitou o endereço errado seria confuso.
 
 ### A rota raiz sem `path`
 
@@ -695,12 +709,6 @@ que valem para a aplicação inteira:
 (`ROUTES.productDetail(product.id)` → `/products/7`) quanto para **declarar as
 rotas** (`ROUTES.productDetail(':id')` → `/products/:id`). Renomear uma URL é
 mexer em uma linha, e o TypeScript aponta todo lugar que a usa.
-
-`RequireAuth` guarda o destino original em `location.state` antes de redirecionar,
-para que o login devolva o usuário exatamente onde ele tentou entrar.
-
-O `404` fica **fora** do `RequireAuth` de propósito: uma URL inexistente é 404
-mesmo sem sessão. Mandar para o login quem digitou o endereço errado seria confuso.
 
 ### ⚠️ Proteção no frontend NÃO é segurança
 
@@ -773,21 +781,21 @@ arquivos.
 
 O CRUD e a listagem.
 
-| Arquivo                         | Papel                                                         |
-| ------------------------------- | ------------------------------------------------------------- |
-| `services/products.service.ts`  | Todas as chamadas de produto; traduz UI ↔ API                 |
-| `schemas/product.schema.ts`     | Validação da resposta da API **e** do formulário              |
-| `types/product.types.ts`        | Tipos inferidos dos esquemas (`z.infer`)                      |
-| `hooks/useProducts.ts`          | `useProducts`, `useProduct`, `useProductCategories`           |
-| `hooks/useProductMutations.ts`  | Criar, editar e excluir — e a invalidação de cache de cada um |
-| `hooks/product-keys.ts`         | Fábrica hierárquica das chaves de cache                       |
-| `hooks/useProductFilters.ts`    | Filtros sincronizados com a query string                      |
-| `hooks/useImageUpload.ts`       | Validar, pré-visualizar e enviar uma imagem                   |
-| `components/ProductForm.tsx`    | Formulário usado por criar **e** editar                       |
-| `components/ProductImageField`  | Campo de imagem (só apresentação; o estado vem do formulário) |
-| `components/ProductFilters.tsx` | Busca (com debounce), categoria, ordenação                    |
-| `components/ProductCard.tsx`    | Item da listagem                                              |
-| `pages/*`                       | Lista, detalhe, criação, edição                               |
+| Arquivo                            | Papel                                                         |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `services/products.service.ts`     | Todas as chamadas de produto; traduz UI ↔ API                 |
+| `schemas/product.schema.ts`        | Validação da resposta da API **e** do formulário              |
+| `types/product.types.ts`           | Tipos inferidos dos esquemas (`z.infer`)                      |
+| `hooks/useProducts.ts`             | `useProducts`, `useProduct`, `useProductCategories`           |
+| `hooks/useProductMutations.ts`     | Criar, editar e excluir — e a invalidação de cache de cada um |
+| `hooks/product-keys.ts`            | Fábrica hierárquica das chaves de cache                       |
+| `hooks/useProductFilters.ts`       | Filtros sincronizados com a query string                      |
+| `hooks/useImageUpload.ts`          | Validar, pré-visualizar e enviar uma imagem                   |
+| `components/ProductForm.tsx`       | Formulário usado por criar **e** editar                       |
+| `components/ProductImageField.tsx` | Campo de imagem (só apresentação; o estado vem do formulário) |
+| `components/ProductFilters.tsx`    | Busca (com debounce), categoria, ordenação                    |
+| `components/ProductCard.tsx`       | Item da listagem                                              |
+| `pages/*`                          | Lista, detalhe, criação, edição                               |
 
 ---
 
@@ -980,8 +988,9 @@ type UploadStatus = 'idle' | 'uploading' | 'success' | 'error'
 
 Com `isUploading` + `isSuccess` + `hasError` separados existiriam oito
 combinações, e a maioria não faz sentido ("enviando" e "com erro" ao mesmo
-tempo?). Com um union, os estados inválidos são **impossíveis de representar**
-— e o TypeScript cobra que todo `if` considere os quatro.
+tempo?). Com um union, os estados inválidos são **impossíveis de representar**:
+o TypeScript recusa qualquer valor fora dos quatro, e o status é sempre
+exatamente um deles.
 
 ### O que NÃO está na store global
 
@@ -1171,8 +1180,8 @@ Se fosse possível, qualquer site poderia montar um caminho de arquivo e enviar
 documentos da sua máquina sem você perceber. O navegador só permite que o
 **usuário** escolha; ao código resta apenas _limpar_ o campo.
 
-É por isso que o componente mantém o próprio estado (arquivo, prévia, progresso)
-em vez de ler o input.
+É por isso que a prévia, o progresso e o erro ficam em estado React (no
+`useImageUpload`), em vez de serem lidos do input.
 
 Consequência prática, também fácil de errar: depois de ler o arquivo, zeramos
 `event.target.value`. Sem isso, escolher `foto.png`, remover, e escolher
@@ -1333,15 +1342,16 @@ toda falha de dados para o `logger` — um ponto só, em vez de um `catch` com
 
 ### Os tipos de erro e o que fazemos com cada um
 
-| Erro                 | Origem                  | Tratamento                                    |
-| -------------------- | ----------------------- | --------------------------------------------- |
-| Validação            | Zod no formulário       | Mensagem ligada ao campo, sem ir à rede       |
-| Autenticação (401)   | Token inválido/expirado | Refresh automático; se falhar, logout + aviso |
-| Autorização (403)    | Sem permissão           | `RequirePermission` → `/403`                  |
-| Não encontrado (404) | Id inexistente          | Mensagem, **sem** botão de tentar novamente   |
-| Rede                 | Offline, CORS, DNS      | Mensagem + tentar novamente                   |
-| Servidor (5xx)       | API fora do ar          | Mensagem + tentar novamente                   |
-| Render               | Bug de componente       | `ErrorBoundary` / `RouteErrorPage`            |
+| Erro                 | Origem                  | Tratamento                                                         |
+| -------------------- | ----------------------- | ------------------------------------------------------------------ |
+| Validação            | Zod no formulário       | Mensagem ligada ao campo, sem ir à rede                            |
+| Autenticação (401)   | Token inválido/expirado | Refresh automático; se falhar, logout + aviso                      |
+| Autorização (403)    | Sem permissão           | Na navegação, `RequirePermission` → `/403`; vindo da API, mensagem |
+| Não encontrado (404) | Id inexistente          | Mensagem, **sem** botão de tentar novamente                        |
+| Rede                 | Offline, CORS, DNS      | Mensagem + tentar novamente                                        |
+| Servidor (5xx)       | API fora do ar          | Mensagem + tentar novamente                                        |
+| Resposta inesperada  | Zod no service          | Mensagem genérica na tela, detalhe no log                          |
+| Render               | Bug de componente       | `ErrorBoundary` / `RouteErrorPage`                                 |
 
 ### Por que não `alert("Deu erro")` em todo componente
 
@@ -1502,7 +1512,8 @@ não vale um teste.
 
 ### O ambiente de teste
 
-`vite.config.ts` carrega dois arquivos antes de cada teste, **nesta ordem**:
+`vite.config.ts` (`setupFiles`) carrega dois arquivos antes de cada arquivo de
+teste, **nesta ordem**:
 
 1. `src/test/polyfills.ts` — cobre o que falta no jsdom (`<dialog>`,
    `localStorage` no Node 25, object URLs rastreáveis). Vem primeiro porque a
@@ -1935,7 +1946,7 @@ está trocando.
 - **Problema:** depois de um F5 há token salvo, mas ainda não se sabe de quem
   ele é. Renderizar as rotas antes da resposta causa o _flash_ de tela de login.
 - **Alternativas:** um componente "portão" em volta do router, com `useEffect`
-  - tela de espera; um loader na rota raiz; middleware do router.
+  e tela de espera; um loader na rota raiz; middleware do router.
 - **Decisão:** loader na rota raiz, com `hydrateFallbackElement`.
 - **Motivo:** é o mecanismo que o router já oferece para "espere isto antes de
   renderizar". Sem efeito, sem trava contra a chamada dupla do `StrictMode`,
@@ -2116,12 +2127,12 @@ Cuidado também com `href={valorDaApi}`: um `javascript:...` executa código.
 Aceitar arquivo do usuário é uma das superfícies de ataque mais perigosas.
 O que fazemos aqui, e o que dependeria do servidor:
 
-| Risco                                | Defesa no frontend                      | Defesa real (servidor)                         |
-| ------------------------------------ | --------------------------------------- | ---------------------------------------------- |
-| Arquivo executável disfarçado        | checa `type` e extensão (**forjáveis**) | inspecionar _magic bytes_ do conteúdo          |
-| SVG com `<script>` (XSS)             | SVG fora dos formatos aceitos           | servir em outro domínio, `Content-Disposition` |
-| Arquivo gigante (negação de serviço) | limite de 2 MB antes de enviar          | limite na borda, antes de ler na memória       |
-| Nome com `../` (path traversal)      | —                                       | gerar nome novo, nunca usar o do usuário       |
+| Risco                                | Defesa no frontend                        | Defesa real (servidor)                         |
+| ------------------------------------ | ----------------------------------------- | ---------------------------------------------- |
+| Arquivo executável disfarçado        | checa o `type` (MIME), que é **forjável** | inspecionar _magic bytes_ do conteúdo          |
+| SVG com `<script>` (XSS)             | SVG fora dos formatos aceitos             | servir em outro domínio, `Content-Disposition` |
+| Arquivo gigante (negação de serviço) | limite de 2 MB antes de enviar            | limite na borda, antes de ler na memória       |
+| Nome com `../` (path traversal)      | —                                         | gerar nome novo, nunca usar o do usuário       |
 
 A regra vale igual: **a validação do cliente é UX**. Quem envia por `curl` não
 passa por ela. Veja [Upload de arquivos](#14-upload-de-arquivos).
@@ -2236,8 +2247,8 @@ O que ainda faltaria para colocar isto no ar de verdade.
 
 1. **Um backend próprio.** É o que destrava quase tudo abaixo: validação real,
    autorização real, escrita que persiste e cookies `HttpOnly`.
-2. **Autenticação segura:** refresh token em cookie `HttpOnly; Secure;
-SameSite`, access token curto em memória, rotação com detecção de reuso e
+2. **Autenticação segura:** refresh token em cookie `HttpOnly`, `Secure` e
+   `SameSite`; access token curto em memória; rotação com detecção de reuso e
    revogação no logout.
 3. **Autorização no servidor.** As permissões de `permissions.ts` precisam
    existir no backend — lá elas valem; aqui, só escondem botões.
@@ -2277,7 +2288,9 @@ SameSite`, access token curto em memória, rotação com detecção de reuso e
 
 ## 23. Checklist
 
-Rode na ordem. Todos foram verificados neste projeto.
+Rode os comandos na ordem; depois percorra a lista. Os itens automatizados
+(lint, tipos, testes, build) são os que o próprio projeto garante — os demais
+são um roteiro para conferir na mão, no navegador.
 
 ```bash
 npm install
