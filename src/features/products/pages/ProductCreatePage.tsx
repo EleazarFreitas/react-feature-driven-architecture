@@ -1,9 +1,10 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
 import { ErrorState } from '@/components/feedback/ErrorState'
 import { LoadingState } from '@/components/feedback/LoadingState'
 import { Alert } from '@/components/ui/Alert'
+import { ROUTES } from '@/config/paths'
+
 import { ProductForm } from '../components/ProductForm'
 import { useCreateProduct } from '../hooks/useProductMutations'
 import { useProductCategories } from '../hooks/useProducts'
@@ -15,9 +16,9 @@ import type { ProductFormValues } from '../types/product.types'
  * A página orquestra; o <ProductForm> apresenta. O fluxo completo do formulário:
  *
  *   digita → valida (Zod, ao sair do campo) → envia → a mutação trava novo
- *   envio → service valida de novo e chama a API → sucesso: o cache das
- *   listagens é invalidado e navegamos com a mensagem / erro: o formulário
- *   mostra o Alert e os dados digitados permanecem na tela.
+ *   envio → o service chama a API → sucesso: o cache das listagens é
+ *   invalidado e navegamos com a mensagem / erro: o formulário mostra o Alert
+ *   e os dados digitados permanecem na tela.
  *
  * Esse último ponto importa: em caso de erro NÃO limpamos o formulário. Perder
  * o que foi digitado por causa de uma falha de rede é das piores experiências

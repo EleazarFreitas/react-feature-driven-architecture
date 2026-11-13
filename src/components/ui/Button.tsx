@@ -37,10 +37,10 @@ export function Button({
        * `||` e não `??`: o botão fica desabilitado se foi pedido explicitamente
        * OU se está carregando.
        *
-       * Com `??` (que só cai no fallback quando o valor é null/undefined),
+       * `??` só cai no fallback quando o valor é null/undefined. Com ele,
        * passar `disabled={false}` — o caso comum de uma expressão booleana —
-       * anulava silenciosamente o `isLoading`, e o botão continuava clicável
-       * durante o envio. Foi um bug real, pego por teste.
+       * anularia silenciosamente o `isLoading`, e o botão continuaria clicável
+       * durante o envio.
        */
       disabled={disabled || isLoading}
       // `aria-busy` avisa leitores de tela que a ação está em andamento.

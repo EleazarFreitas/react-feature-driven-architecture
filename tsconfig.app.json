@@ -5,7 +5,6 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "esnext",
     "types": ["vite/client"],
-    "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
     /* Bundler mode: o Vite faz o bundle, o tsc só checa tipos. */
@@ -16,7 +15,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Alias "@/..." para evitar imports relativos frágeis ("../../../"). */
+    /* Alias "@/..." para evitar imports relativos frágeis ("../../../").
+       O Vite lê este mesmo mapa (resolve.tsconfigPaths em vite.config.ts). */
     "paths": { "@/*": ["./src/*"] },
 
     /* Rigor de tipos.

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import { API_BASE, UPLOAD_BASE } from '@/test/handlers'
 import { server } from '@/test/server'
-import { objectUrlTracker } from '@/test/setup'
+import { objectUrlTracker } from '@/test/polyfills'
 import { renderApp } from '@/test/test-utils'
 
 /**
@@ -219,8 +219,10 @@ describe('editar produto', () => {
     await user.type(title, 'Notebook Pro 16')
     await user.click(screen.getByRole('button', { name: 'Salvar alterações' }))
 
-    // A API não persiste: o detalhe volta com o título original.
+    // A API não persiste: o detalhe volta com o título original — e o aviso
+    // deixado pela tela de edição explica por quê.
     expect(await screen.findByRole('heading', { name: 'Notebook Pro 14' })).toBeInTheDocument()
+    expect(screen.getByText(/alterações enviadas/i)).toBeInTheDocument()
 
     // Editar o título não exige reenviar a foto: a imagem atual segue valendo.
     expect(updated).toEqual([
@@ -230,5 +232,22 @@ describe('editar produto', () => {
         thumbnail: 'https://cdn.test/notebook.png',
       }),
     ])
+  })
+
+  it('"Desfazer alterações" devolve os campos e a imagem ao estado inicial', async () => {
+    const { user } = renderApp('/products/1/edit', { as: 'admin' })
+
+    const title = await screen.findByLabelText('Título')
+    await user.type(title, ' (editado)')
+    await user.upload(imageInput(), makeFile('nova.png', 'image/png', 1000))
+    await screen.findByText(/imagem enviada com sucesso/i)
+
+    await user.click(screen.getByRole('button', { name: /desfazer alterações/i }))
+
+    expect(title).toHaveValue('Notebook Pro 14')
+    // A imagem volta a ser a do produto, e a prévia da que foi descartada é
+    // liberada da memória.
+    expect(screen.getByRole('presentation')).toHaveAttribute('src', 'https://cdn.test/notebook.png')
+    expect(objectUrlTracker.revoked).toEqual(objectUrlTracker.created)
   })
 })

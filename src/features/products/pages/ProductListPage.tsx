@@ -1,7 +1,3 @@
-import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-
-import { ROUTES } from '@/app/paths'
 import { EmptyState } from '@/components/feedback/EmptyState'
 import { ErrorState } from '@/components/feedback/ErrorState'
 import { LoadingState } from '@/components/feedback/LoadingState'
@@ -9,12 +5,14 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { LinkButton } from '@/components/ui/LinkButton'
 import { Pagination } from '@/components/ui/Pagination'
+import { ROUTES } from '@/config/paths'
 import { useHasPermission } from '@/features/auth/store/auth.store'
+import { useFlashNotice } from '@/hooks/useFlashNotice'
 
 import { ProductCard } from '../components/ProductCard'
 import { ProductFilters } from '../components/ProductFilters'
-import { useProductCategories, useProducts } from '../hooks/useProducts'
 import { useProductFilters } from '../hooks/useProductFilters'
+import { useProductCategories, useProducts } from '../hooks/useProducts'
 
 /**
  * Listagem de produtos.
@@ -29,7 +27,7 @@ import { useProductFilters } from '../hooks/useProductFilters'
  *                   usuário vê uma tela branca e acha que o app quebrou);
  *   4. SUCESSO    — os dados.
  *
- * Repare que o VAZIO tem dois textos diferentes: "nenhum produto cadastrado" e
+ * Repare que o VAZIO tem dois textos diferentes: "nenhum produto disponível" e
  * "sua busca não encontrou nada" são situações distintas e pedem saídas
  * distintas. Tratar as duas como uma só é a diferença entre o usuário entender
  * ou não o que fazer em seguida.
@@ -41,8 +39,10 @@ export function ProductListPage() {
   const productsQuery = useProducts(filters.query)
   const categoriesQuery = useProductCategories()
 
+  // Aviso deixado pela tela anterior ("Produto enviado...", "Exclusão enviada...").
   const notice = useFlashNotice()
 
+  const products = productsQuery.data?.products ?? []
   const total = productsQuery.data?.total ?? 0
   // Estado DERIVADO: calculado na hora a partir de outros dados. Guardar isto
   // num useState criaria uma segunda fonte da verdade, capaz de divergir de
@@ -72,7 +72,8 @@ export function ProductListPage() {
         isLoadingCategories={categoriesQuery.isLoading}
       />
 
-      {/* ESTADO 1: carregando */}
+      {/* ESTADO 1: carregando. `isLoading` é a PRIMEIRA busca, sem nada em
+          cache para mostrar — numa revalidação em segundo plano ele é false. */}
       {productsQuery.isLoading && <LoadingState label="Carregando produtos..." />}
 
       {/* ESTADO 2: erro — com opção de tentar de novo */}
@@ -81,7 +82,7 @@ export function ProductListPage() {
       )}
 
       {/* ESTADO 3: vazio */}
-      {productsQuery.isSuccess && productsQuery.data?.products.length === 0 && (
+      {productsQuery.isSuccess && products.length === 0 && (
         <EmptyState
           title={
             filters.hasActiveFilters ? 'Nenhum produto encontrado' : 'Nenhum produto disponível'
@@ -92,20 +93,29 @@ export function ProductListPage() {
               : 'A API não retornou produtos para esta página.'
           }
           action={
-            filters.hasActiveFilters ? (
+            filters.hasActiveFilters && (
               <Button variant="secondary" onClick={filters.clearFilters}>
                 Limpar filtros
               </Button>
-            ) : undefined
+            )
           }
         />
       )}
 
       {/* ESTADO 4: sucesso */}
-      {productsQuery.isSuccess && productsQuery.data && productsQuery.data.products.length > 0 && (
+      {productsQuery.isSuccess && products.length > 0 && (
         <>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {productsQuery.data.products.map((product) => (
+          <ul
+            className={[
+              'grid gap-4 transition-opacity sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+              // Com `keepPreviousData`, ao trocar de página ou de filtro a
+              // lista ANTERIOR continua na tela até a nova chegar.
+              // `isPlaceholderData` é o sinal disso: esmaecemos a lista para o
+              // usuário perceber que aquilo ainda não é o resultado pedido.
+              productsQuery.isPlaceholderData ? 'opacity-50' : '',
+            ].join(' ')}
+          >
+            {products.map((product) => (
               // <ul>/<li> porque isto é, semanticamente, uma lista — um leitor
               // de tela anuncia "lista com 12 itens", o que orienta o usuário.
               <li key={product.id}>
@@ -118,49 +128,12 @@ export function ProductListPage() {
             page={filters.query.page}
             totalPages={totalPages}
             onPageChange={filters.setPage}
-            // `isFetching` (e não `isLoading`): com `keepPreviousData` a lista
-            // anterior continua na tela enquanto a próxima página carrega, e é
-            // esse intervalo que precisa travar os botões de paginação.
-            isDisabled={productsQuery.isFetching}
+            // Trava os botões enquanto a página pedida carrega: nesse intervalo
+            // o total de páginas ainda é o da consulta anterior.
+            isDisabled={productsQuery.isPlaceholderData}
           />
         </>
       )}
     </div>
   )
-}
-
-/**
- * Lê a mensagem de sucesso deixada por outra página (criar/editar/excluir) e a
- * apaga em seguida.
- *
- * Por que apagar: `location.state` faz parte do histórico do navegador. Sem o
- * `replace`, a mensagem "Produto criado" reapareceria ao recarregar a página ou
- * ao voltar — parecendo que a ação aconteceu de novo.
- */
-function useFlashNotice(): string | null {
-  const location = useLocation()
-  const navigate = useNavigate()
-
-  const state: unknown = location.state
-  const message =
-    typeof state === 'object' &&
-    state !== null &&
-    'notice' in state &&
-    typeof state.notice === 'string'
-      ? state.notice
-      : null
-
-  // Guardamos numa variável de estado para que a mensagem continue visível
-  // depois de limparmos o histórico.
-  const [notice] = useState(message)
-
-  useEffect(() => {
-    if (message !== null) {
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
-    }
-    // Roda uma vez: depois do replace, `message` já é null.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  return notice
 }

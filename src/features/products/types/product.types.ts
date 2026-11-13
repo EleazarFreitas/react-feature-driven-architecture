@@ -1,10 +1,6 @@
 import type { z } from 'zod'
 
-import type {
-  productFormSchema,
-  productListResponseSchema,
-  productSchema,
-} from '../schemas/product.schema'
+import type { productFormSchema, productSchema } from '../schemas/product.schema'
 
 /**
  * Tipos da feature de produtos.
@@ -15,7 +11,6 @@ import type {
  */
 
 export type Product = z.infer<typeof productSchema>
-export type ProductListResponse = z.infer<typeof productListResponseSchema>
 export type ProductFormValues = z.infer<typeof productFormSchema>
 
 /**

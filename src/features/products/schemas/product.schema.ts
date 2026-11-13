@@ -58,13 +58,13 @@ export const productListResponseSchema = z.object({
  * Resposta de POST /products/add e PUT /products/:id.
  *
  * ATENÇÃO — comportamento real da API, verificado: a resposta NÃO é um produto
- * completo. Ela ecoa apenas os campos enviados, mais um `id`. Por isso não
- * validamos com `productSchema` (falharia por campos ausentes) e o app não
- * tenta exibir o resultado como se fosse um produto inteiro.
+ * completo. O POST ecoa os campos enviados mais um `id`; o PUT devolve o
+ * produto pela metade (sem `tags`, `availabilityStatus` e outros). Por isso não
+ * validamos com `productSchema` (falharia por campos ausentes): exigimos só o
+ * `id`, que é a única coisa que a aplicação usa dessa resposta.
  */
-export const productMutationResponseSchema = z.object({
+export const productWriteResponseSchema = z.object({
   id: z.number(),
-  title: z.string().optional(),
 })
 
 /** GET /products/category-list devolve uma lista simples de slugs. */
@@ -77,8 +77,9 @@ export const categoryListSchema = z.array(z.string())
  * regra falhou ("Informe um preço maior que zero", e não "price: positive").
  *
  * Os campos numéricos são registrados no formulário com `valueAsNumber`, então
- * chegam aqui já como número. Quando o campo está vazio o valor é NaN — e o
- * `error` de `z.number()` cobre esse caso com uma mensagem legível.
+ * chegam aqui já como número. Quando o campo está vazio o valor é NaN, que o
+ * `z.number()` recusa — e o `error` troca a mensagem técnica do Zod
+ * ("expected number, received NaN") por uma legível.
  */
 export const productFormSchema = z.object({
   title: z
@@ -117,8 +118,7 @@ export const productFormSchema = z.object({
    * acontece assim que o usuário escolhe o arquivo, não no submit — é a UX mais
    * comum e evita que ele espere o envio depois de clicar em "Salvar".
    *
-   * Opcional porque produto sem imagem é aceitável; o que não pode é imagem
-   * pela metade.
+   * Opcional porque produto sem imagem é aceitável.
    */
   thumbnail: z.url('A imagem enviada retornou uma URL inválida').optional(),
 })

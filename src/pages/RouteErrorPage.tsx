@@ -1,4 +1,5 @@
-import { useRouteError } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useRouteError } from 'react-router'
 
 import { Button } from '@/components/ui/Button'
 import { getErrorMessage } from '@/lib/http/errors'
@@ -12,14 +13,18 @@ import { logger } from '@/lib/logger'
  * `errorElement` ele mostra a própria tela de erro técnica (com stack trace).
  * Os dois se complementam:
  *
- *   - RouteErrorPage  → falhas ao renderizar uma rota (inclusive falha ao
- *                        carregar um chunk lazy, comum após um deploy novo);
- *   - ErrorBoundary   → falhas fora do router (o AuthGate, por exemplo).
+ *   - RouteErrorPage  → falhas ao carregar ou renderizar uma rota (inclusive
+ *                        falha ao baixar um chunk lazy, comum após um deploy);
+ *   - ErrorBoundary   → falhas fora do router (um provider, por exemplo).
  */
 export function RouteErrorPage() {
-  const error: unknown = useRouteError()
+  const error = useRouteError()
 
-  logger.error('Erro na rota', error)
+  // Logar é um efeito colateral: dentro de um efeito ele roda uma vez por erro,
+  // e não a cada re-render do componente.
+  useEffect(() => {
+    logger.error('Erro na rota', error)
+  }, [error])
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">

@@ -1,6 +1,6 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
+import { ROUTES } from '@/config/paths'
 import { Badge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/format'
 
@@ -11,7 +11,7 @@ import type { Product } from '../types/product.types'
  *
  * Extraído porque a página de listagem já tem responsabilidade demais (filtros,
  * paginação, estados de carregamento). Isolar o item deixa as duas coisas
- * legíveis e permite testar a formatação sem montar a tela inteira.
+ * legíveis.
  */
 
 interface ProductCardProps {
@@ -34,7 +34,10 @@ export function ProductCard({ product }: ProductCardProps) {
       />
 
       <div className="flex flex-1 flex-col gap-2 border-t border-slate-100 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">
+        {/* <h2>: a página tem um <h1> ("Produtos") e cada cartão é uma seção
+            logo abaixo dele. Pular para <h3> quebraria a hierarquia que
+            leitores de tela usam para navegar. */}
+        <h2 className="text-sm font-semibold text-slate-900">
           {/*
             O link envolve o TÍTULO, e não o cartão inteiro. Transformar o
             cartão todo em link deixa o texto do link enorme e confuso para
@@ -46,7 +49,7 @@ export function ProductCard({ product }: ProductCardProps) {
           >
             {product.title}
           </Link>
-        </h3>
+        </h2>
 
         <p className="line-clamp-2 text-xs text-slate-500">{product.description}</p>
 

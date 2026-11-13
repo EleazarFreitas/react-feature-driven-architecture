@@ -13,10 +13,11 @@ import type { AuthTokens, AuthUser, LoginCredentials } from '../types/auth.types
  * fica contido AQUI — nenhum componente conhece o formato cru da resposta.
  *
  * VALIDAÇÃO EM RUNTIME: uma anotação de tipo TypeScript é apagada no build e
- * não garante nada sobre o que chega pela rede. Nos endpoints de autenticação
- * validamos a resposta com Zod, porque um campo faltando aqui quebra o app
- * inteiro — e é muito melhor falhar com "resposta inesperada da API" do que
- * propagar `undefined` até um erro incompreensível três telas depois.
+ * não garante nada sobre o que chega pela rede. Por isso toda resposta é
+ * validada com Zod: se a API mudar de formato, o erro acontece AQUI, apontando
+ * o campo exato — e não como um `undefined` que só explode três telas depois.
+ * `z.object` também descarta os campos que não declaramos, então o `password`
+ * que /auth/me devolve nunca chega à store.
  */
 
 const tokensSchema = z.object({
@@ -62,8 +63,8 @@ export const authService = {
   /**
    * GET /auth/me — quem é o dono do access token atual.
    *
-   * É a fonte da verdade do PAPEL do usuário, porque as claims do JWT da
-   * DummyJSON não incluem `role` (ver services/jwt.ts).
+   * É a fonte da verdade do PAPEL do usuário: nem a resposta do login nem as
+   * claims do JWT da DummyJSON incluem `role` (ver docs.md > JWT).
    *
    * Também é o que usamos para restaurar a sessão depois de um F5: o token
    * está no storage, mas os dados do usuário não.

@@ -1,12 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { useController, useForm } from 'react-hook-form'
 
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Input, Select, Textarea } from '@/components/ui/Field'
 import { getErrorMessage } from '@/lib/http/errors'
 
+import { useImageUpload } from '../hooks/useImageUpload'
 import { productFormSchema } from '../schemas/product.schema'
 import type { ProductFormValues } from '../types/product.types'
 import { ProductImageField } from './ProductImageField'
@@ -23,7 +23,7 @@ import { ProductImageField } from './ProductImageField'
  *   - o FORMULÁRIO cuida dos campos, da validação e do que mostrar ao usuário;
  *   - a PÁGINA cuida da chamada à API e da navegação depois do sucesso.
  * Por isso ele recebe `onSubmit`, `isSubmitting` e `submitError` de fora, em vez
- * de chamar o service sozinho. Assim dá para testá-lo sem rede e reaproveitá-lo.
+ * de chamar o service sozinho.
  */
 
 interface ProductFormProps {
@@ -33,7 +33,7 @@ interface ProductFormProps {
   onSubmit: (values: ProductFormValues) => void
   onCancel: () => void
   isSubmitting: boolean
-  /** Erro vindo da API (a validação de campo é tratada internamente). */
+  /** Erro vindo da API, ou null (a validação de campo é tratada internamente). */
   submitError: unknown
   submitLabel: string
 }
@@ -51,7 +51,7 @@ const EMPTY_FORM: ProductFormValues = {
 }
 
 export function ProductForm({
-  defaultValues,
+  defaultValues = EMPTY_FORM,
   categories,
   onSubmit,
   onCancel,
@@ -68,24 +68,39 @@ export function ProductForm({
   } = useForm<ProductFormValues>({
     // Liga o Zod ao React Hook Form: o esquema passa a ser a regra do formulário.
     resolver: zodResolver(productFormSchema),
-    defaultValues: defaultValues ?? EMPTY_FORM,
+    defaultValues,
     mode: 'onBlur',
   })
+
+  /**
+   * POR QUE `useController` AQUI, SE OS OUTROS CAMPOS USAM `register`?
+   *
+   * `register` serve para inputs NATIVOS: ele liga a `ref` ao elemento e lê o
+   * valor direto do DOM. Funciona para <input>, <select> e <textarea>.
+   *
+   * A imagem não tem um input nativo cujo valor represente o dado: o valor é
+   * uma URL produzida pelo upload, que não está digitada em lugar nenhum.
+   * `useController` existe exatamente para esse caso — ele devolve um par
+   * `value`/`onChange` controlado pelo formulário para um componente qualquer.
+   * É a mesma ferramenta que você usaria com um date picker ou um select de
+   * biblioteca.
+   */
+  const { field: thumbnail } = useController({ control, name: 'thumbnail' })
 
   /**
    * O upload roda em paralelo ao preenchimento do formulário, então é possível
    * clicar em "Salvar" com a imagem ainda subindo. Se isso acontecesse, o
    * produto seria criado sem a `thumbnail` — e o usuário juraria que anexou a
-   * imagem. Bloquear o envio é mais simples (e mais honesto) do que tentar
-   * esperar o upload terminar dentro do submit.
+   * imagem. Por isso o botão de salvar olha para `imageUpload.isUploading`.
    */
-  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const imageUpload = useImageUpload(thumbnail.onChange)
 
-  // Estabiliza a identidade da função: ela é dependência de um efeito dentro do
-  // ProductImageField, e recriá-la a cada render dispararia o efeito à toa.
-  const handleUploadingChange = useCallback((uploading: boolean) => {
-    setIsUploadingImage(uploading)
-  }, [])
+  function handleReset() {
+    // A ordem importa: `clear()` zera o campo de imagem, e o `reset()` em
+    // seguida devolve TODOS os campos (inclusive a imagem) ao valor inicial.
+    imageUpload.clear()
+    reset()
+  }
 
   return (
     <form
@@ -127,9 +142,9 @@ export function ProductForm({
           type="number"
           step="0.01"
           min="0"
+          error={errors.price?.message}
           // `valueAsNumber` faz o RHF entregar número em vez de string — sem
           // isso, o Zod receberia "19.9" e reclamaria do tipo.
-          error={errors.price?.message}
           {...register('price', { valueAsNumber: true })}
         />
 
@@ -153,34 +168,14 @@ export function ProductForm({
         />
       </div>
 
-      {/*
-        POR QUE `Controller` AQUI, SE OS OUTROS CAMPOS USAM `register`?
-
-        `register` serve para inputs NATIVOS: ele liga a `ref` ao elemento e lê
-        o valor direto do DOM. Funciona para <input>, <select> e <textarea>.
-
-        Este campo não tem um input nativo cujo valor represente o dado: o valor
-        é uma URL produzida pelo upload, que não está digitada em lugar nenhum.
-        `Controller` existe exatamente para esse caso — ele dá um par
-        `value`/`onChange` controlado pelo formulário para um componente
-        qualquer. É a mesma ferramenta que você usaria com um date picker ou um
-        select de biblioteca.
-      */}
-      <Controller
-        control={control}
-        name="thumbnail"
-        render={({ field }) => (
-          <ProductImageField
-            value={field.value}
-            onChange={field.onChange}
-            onUploadingChange={handleUploadingChange}
-            disabled={isSubmitting}
-          />
-        )}
+      <ProductImageField
+        upload={imageUpload}
+        currentUrl={thumbnail.value}
+        disabled={isSubmitting}
       />
 
-      {isUploadingImage && (
-        <p className="text-sm text-slate-500" aria-live="polite">
+      {imageUpload.isUploading && (
+        <p role="status" className="text-sm text-slate-500">
           Aguarde o envio da imagem terminar para salvar.
         </p>
       )}
@@ -188,9 +183,8 @@ export function ProductForm({
       <div className="flex flex-wrap gap-3">
         {/* `isLoading` desabilita o botão: é a trava contra clique duplo. O envio
             por Enter (que não passa pelo botão) é barrado na página, que ignora
-            o submit enquanto a mutação está pendente.
-            `disabled` adicional enquanto a imagem sobe — ver isUploadingImage. */}
-        <Button type="submit" isLoading={isSubmitting} disabled={isUploadingImage}>
+            o submit enquanto a mutação está pendente. */}
+        <Button type="submit" isLoading={isSubmitting} disabled={imageUpload.isUploading}>
           {submitLabel}
         </Button>
 
@@ -201,12 +195,7 @@ export function ProductForm({
         {/* Só aparece quando há o que desfazer — `isDirty` é o RHF comparando os
             valores atuais com os iniciais. */}
         {isDirty && (
-          <Button
-            variant="ghost"
-            onClick={() => reset()}
-            disabled={isSubmitting}
-            className="ml-auto"
-          >
+          <Button variant="ghost" onClick={handleReset} disabled={isSubmitting} className="ml-auto">
             Desfazer alterações
           </Button>
         )}

@@ -2,8 +2,8 @@
 #
 # POR QUE: no Windows o `core.autocrlf=true` entrega os arquivos com CRLF na
 # cópia de trabalho, enquanto o Prettier grava LF (`endOfLine: "lf"`, o padrão).
-# O resultado era `npm run format:check` reprovando TODOS os arquivos do projeto
-# em máquinas Windows, sem nenhum problema real de formatação.
+# Sem esta regra, `npm run format:check` reprova TODOS os arquivos do projeto em
+# máquinas Windows, sem nenhum problema real de formatação.
 #
 # `eol=lf` tem precedência sobre o core.autocrlf de cada dev, então o time
 # inteiro vê o mesmo conteúdo byte a byte, independente de sistema operacional.

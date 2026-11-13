@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 
-import { makeJwt, makeProduct, makeUser } from './fixtures'
+import { makeProduct, makeUser, TEST_TOKENS } from './fixtures'
 
 /**
  * Handlers padrão do MSW (Mock Service Worker).
@@ -39,7 +39,7 @@ export const handlers = [
       return HttpResponse.json({ message: 'Invalid credentials' }, { status: 400 })
     }
 
-    return HttpResponse.json({ accessToken: makeJwt(), refreshToken: makeJwt(86400) })
+    return HttpResponse.json(TEST_TOKENS)
   }),
 
   // GET /auth/me — exige o Bearer token, como a API real.
@@ -53,9 +53,7 @@ export const handlers = [
     return HttpResponse.json(makeUser('admin'))
   }),
 
-  http.post(`${API_BASE}/auth/refresh`, () =>
-    HttpResponse.json({ accessToken: makeJwt(), refreshToken: makeJwt(86400) }),
-  ),
+  http.post(`${API_BASE}/auth/refresh`, () => HttpResponse.json(TEST_TOKENS)),
 
   // GET /products — devolve o mesmo envelope da DummyJSON.
   http.get(`${API_BASE}/products`, () =>

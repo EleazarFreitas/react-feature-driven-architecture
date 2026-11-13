@@ -2,22 +2,23 @@ import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
+import { makeProduct } from '@/test/fixtures'
 import { API_BASE } from '@/test/handlers'
 import { server } from '@/test/server'
 import { renderApp } from '@/test/test-utils'
 
 /**
  * Listagem: os estados de interface que o usuário realmente percorre
- * (carregando → dados, vazio com saída, erro com nova tentativa) e a busca de
- * ponta a ponta — campo → URL → parâmetros da API → tela.
+ * (carregando → dados, vazio com saída, erro com nova tentativa), a busca de
+ * ponta a ponta — campo → URL → parâmetros da API → tela — e a paginação.
  */
 
 describe('listagem de produtos', () => {
   it('mostra o carregamento, depois os produtos e a ação de criar para o admin', async () => {
     renderApp('/products', { as: 'admin' })
 
-    // Buscamos pelo TEXTO, e não por role="status": o AuthGate também
-    // renderiza um "Verificando sessão..." com esse mesmo role.
+    // Buscamos pelo TEXTO, e não por role="status": o "Carregando aplicação..."
+    // do boot (sessão sendo restaurada) usa esse mesmo role.
     expect(await screen.findByText(/carregando produtos/i)).toBeInTheDocument()
 
     expect(await screen.findByText('Notebook Pro 14')).toBeInTheDocument()
@@ -63,6 +64,41 @@ describe('listagem de produtos', () => {
 
     expect(await screen.findByText('Notebook Pro 14')).toBeInTheDocument()
     expect(screen.getByLabelText('Buscar')).toHaveValue('')
+  })
+
+  it('pagina traduzindo "página" da interface para "skip" da API', async () => {
+    const requests: URL[] = []
+    server.use(
+      http.get(`${API_BASE}/products`, ({ request }) => {
+        const url = new URL(request.url)
+        requests.push(url)
+        const skip = Number(url.searchParams.get('skip'))
+        return HttpResponse.json({
+          // O título muda por página para o teste saber qual delas está na tela.
+          products: [makeProduct({ id: skip + 1, title: `Produto ${skip + 1}` })],
+          total: 30,
+          skip,
+          limit: 12,
+        })
+      }),
+    )
+
+    const { user } = renderApp('/products', { as: 'admin' })
+
+    // 30 itens em páginas de 12 = 3 páginas: `total` é o total no SERVIDOR.
+    expect(await screen.findByText('Produto 1')).toBeInTheDocument()
+    // O texto está dividido em vários elementos (<strong>), então conferimos o
+    // conteúdo da região de paginação em vez de procurar a frase inteira.
+    const pagination = screen.getByRole('navigation', { name: 'Paginação' })
+    expect(pagination).toHaveTextContent('Página 1 de 3')
+    expect(screen.getByRole('button', { name: 'Anterior' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Próxima' }))
+
+    // Página 2 = pular os 12 primeiros.
+    expect(await screen.findByText('Produto 13')).toBeInTheDocument()
+    expect(pagination).toHaveTextContent('Página 2 de 3')
+    expect(requests.map((url) => url.searchParams.get('skip'))).toEqual(['0', '12'])
   })
 
   it('mostra o erro e permite tentar novamente', async () => {

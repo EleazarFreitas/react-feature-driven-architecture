@@ -1,4 +1,4 @@
-import { ROUTES } from '@/app/paths'
+import { ROUTES } from '@/config/paths'
 import { LinkButton } from '@/components/ui/LinkButton'
 
 /**

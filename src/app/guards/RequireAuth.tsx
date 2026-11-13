@@ -1,6 +1,6 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
+import { ROUTES } from '@/config/paths'
 import { useIsAuthenticated } from '@/features/auth/store/auth.store'
 
 /**
@@ -10,6 +10,10 @@ import { useIsAuthenticated } from '@/features/auth/store/auth.store'
  * declaramos um nó de rota que renderiza <Outlet /> (os filhos) só quando há
  * sessão. Uma linha no router protege um ramo inteiro, e é impossível esquecer
  * de proteger uma página nova adicionada ali dentro.
+ *
+ * Por ser um componente que LÊ a store, a guarda é reativa: quando o usuário
+ * clica em "Sair" (ou a sessão expira no meio do uso), ela re-renderiza e
+ * redireciona na hora, sem ninguém precisar chamar `navigate`.
  *
  * ⚠️ ISTO NÃO É SEGURANÇA. É navegação.
  * Todo este código roda no navegador do usuário, que pode alterá-lo à vontade.
@@ -35,7 +39,7 @@ export function RequireAuth() {
     )
   }
 
-  // Não precisamos tratar o estado "verificando sessão" aqui: o <AuthGate> só
-  // renderiza a aplicação depois que o boot termina (ver features/auth/components).
+  // Não existe o estado "ainda verificando a sessão" aqui: o loader da rota
+  // raiz só libera o primeiro render depois de resolver isso (ver app/router.tsx).
   return <Outlet />
 }

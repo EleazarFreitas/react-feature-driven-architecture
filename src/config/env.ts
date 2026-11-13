@@ -53,6 +53,3 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data
-
-/** `true` durante `npm run dev` e nos testes. Útil para logs de debug. */
-export const isDev = import.meta.env.DEV

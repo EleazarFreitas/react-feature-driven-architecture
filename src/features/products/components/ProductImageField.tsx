@@ -1,56 +1,42 @@
-import { useCallback, useEffect } from 'react'
-
 import { Button } from '@/components/ui/Button'
 import { FileDropzone } from '@/components/ui/FileDropzone'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 
-import { useImageUpload } from '../hooks/useImageUpload'
+import type { ImageUpload } from '../hooks/useImageUpload'
 import { ACCEPTED_IMAGE_TYPES } from '../schemas/product.schema'
 
 /**
- * Campo de imagem do produto.
+ * Campo de imagem do produto — só a APRESENTAÇÃO.
  *
- * Divisão de papéis, seguindo o que o resto do projeto faz:
- *   - <FileDropzone>      UI genérica de escolher arquivo (não sabe o que é produto)
- *   - useImageUpload      validação, prévia, envio e limpeza de memória
- *   - ESTE componente     junta os dois e entrega a URL final ao formulário
+ * Divisão de papéis:
+ *   - <FileDropzone>   UI genérica de escolher arquivo (não sabe o que é produto)
+ *   - useImageUpload   validação, prévia, envio e limpeza de memória
+ *   - ESTE componente  desenha o estado que o hook expõe
  *
- * Ele recebe `value`/`onChange` no formato que o React Hook Form espera, o que
- * o torna um campo controlado comum aos olhos do formulário.
+ * O hook é chamado no <ProductForm>, e não aqui, porque DOIS lugares dependem
+ * do estado do upload: este campo (prévia, progresso) e o botão "Salvar" (que
+ * trava enquanto a imagem sobe). Estado usado por dois componentes mora no
+ * ancestral comum e desce por props — a alternativa seria este componente
+ * "avisar" o pai com um efeito, que é exatamente o tipo de sincronização que
+ * gera bugs.
  */
 
 interface ProductImageFieldProps {
-  /** URL já enviada (no modo edição, vem do produto). */
-  value: string | undefined
-  onChange: (url: string | undefined) => void
-  /** Avisa o formulário para bloquear o submit durante o envio. */
-  onUploadingChange: (isUploading: boolean) => void
+  upload: ImageUpload
+  /** URL guardada no formulário (no modo edição, a imagem atual do produto). */
+  currentUrl: string | undefined
   disabled?: boolean
 }
 
 export function ProductImageField({
-  value,
-  onChange,
-  onUploadingChange,
+  upload,
+  currentUrl,
   disabled = false,
 }: ProductImageFieldProps) {
-  // `useCallback` aqui não é otimização: estas funções entram no array de
-  // dependências do useImageUpload, e recriá-las a cada render faria os
-  // `useCallback` internos dele mudarem de identidade sem necessidade.
-  const handleUploaded = useCallback((url: string) => onChange(url), [onChange])
-  const handleCleared = useCallback(() => onChange(undefined), [onChange])
-
-  const upload = useImageUpload({ onUploaded: handleUploaded, onCleared: handleCleared })
-
-  useEffect(() => {
-    onUploadingChange(upload.isUploading)
-  }, [upload.isUploading, onUploadingChange])
-
   // No modo edição já existe uma imagem salva, mas nenhuma prévia local —
   // então caímos na URL do produto, que vem do CDN da API de produtos e
   // carrega normalmente.
-  const imageToShow = upload.previewUrl ?? value ?? null
-  const hasImage = imageToShow !== null
+  const imageToShow = upload.previewUrl ?? currentUrl
 
   return (
     <div className="flex flex-col gap-3">
@@ -58,12 +44,14 @@ export function ProductImageField({
         label="Imagem do produto"
         hint="PNG, JPG ou WebP · até 2 MB"
         accept={ACCEPTED_IMAGE_TYPES.join(',')}
+        // `void`: selectFile é assíncrona e trata os próprios erros; o handler
+        // de evento não tem o que fazer com a promise.
         onFileSelected={(file) => void upload.selectFile(file)}
         disabled={disabled || upload.isUploading}
         error={upload.error ?? undefined}
       />
 
-      {hasImage && (
+      {imageToShow !== undefined && (
         <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-3">
           <img
             src={imageToShow}
@@ -83,15 +71,13 @@ export function ProductImageField({
             {upload.isUploading && (
               <>
                 <ProgressBar percent={upload.percent} label="Enviando imagem" />
-                {/* `aria-live` anuncia a conclusão sem roubar o foco. */}
-                <p className="text-xs text-slate-500" aria-live="polite">
-                  Enviando... {upload.percent}%
-                </p>
+                <p className="text-xs text-slate-500">Enviando... {upload.percent}%</p>
               </>
             )}
 
             {upload.status === 'success' && (
-              <p className="text-xs text-green-700" aria-live="polite">
+              // `role="status"` anuncia a conclusão sem roubar o foco.
+              <p role="status" className="text-xs text-green-700">
                 Imagem enviada com sucesso.
               </p>
             )}

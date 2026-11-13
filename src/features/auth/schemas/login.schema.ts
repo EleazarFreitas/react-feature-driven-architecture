@@ -8,7 +8,8 @@ import { z } from 'zod'
  *      dele com `z.infer`. Não existe o risco clássico de mudar o formulário e
  *      esquecer de atualizar a interface (ou o contrário);
  *   2. as mensagens ficam junto da regra, não espalhadas pela UI;
- *   3. o mesmo esquema valida formulário E resposta de API (ver auth.service).
+ *   3. é a mesma ferramenta que valida as respostas da API (ver auth.service):
+ *      uma biblioteca só para "o que entra no app precisa ter este formato".
  *
  * Validação de formato aqui é sobre EXPERIÊNCIA (avisar cedo, sem ida à rede).
  * Não substitui a validação do servidor, que é a que realmente protege os dados.

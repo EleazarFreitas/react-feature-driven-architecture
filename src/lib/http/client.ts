@@ -8,15 +8,15 @@ import { HttpError, NetworkError, SessionExpiredError } from './errors'
  * Cliente HTTP da aplicação.
  *
  * POR QUE `fetch` E NÃO AXIOS?
- * O Axios é ótimo, mas resolve problemas que aqui ou não temos ou custam pouco:
- * interceptors (≈30 linhas abaixo), JSON automático (1 linha), erro em status
- * != 2xx (1 linha), baseURL (1 linha). O `fetch` é nativo — zero KB no bundle,
- * suporte nativo a `AbortSignal` (que usamos para cancelar requisições) e é a
- * API que você encontrará em qualquer ambiente JS moderno.
+ * O Axios é ótimo, mas resolve problemas que aqui custam pouco: interceptors
+ * (≈30 linhas abaixo), JSON automático (1 linha), erro em status != 2xx
+ * (1 linha), baseURL (1 linha). O `fetch` é nativo — zero KB no bundle, suporte
+ * a `AbortSignal` (que usamos para cancelar requisições) e é a API que você
+ * encontrará em qualquer ambiente JS moderno.
  *
- * Quando eu trocaria por Axios num projeto real: upload com progresso,
- * necessidade de timeout/retry declarativos complexos, ou suporte a navegadores
- * antigos. Nada disso se aplica aqui.
+ * Quando o Axios se paga num projeto real: muitos uploads com progresso (aqui
+ * há um só, resolvido em `upload.ts`) ou uma política elaborada de
+ * timeout/retry por requisição.
  *
  * A regra importante NÃO é "fetch vs Axios": é que a aplicação inteira passe
  * por UM ponto. Assim autenticação, tratamento de erro e refresh de token
@@ -24,7 +24,7 @@ import { HttpError, NetworkError, SessionExpiredError } from './errors'
  */
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   /** Serializado como JSON automaticamente. */
   body?: unknown
   /** Query string. Valores `undefined` são omitidos — evita "?q=undefined". */
@@ -124,7 +124,7 @@ function refreshOnce(): Promise<string | null> {
  * Por que só uma vez: se a requisição repetida também der 401, o problema não é
  * o token expirado — insistir viraria loop infinito.
  */
-export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   let response = await performRequest(path, options)
 
   if (response.status === 401 && !options.skipAuth) {
@@ -152,14 +152,13 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new HttpError(response.status, message, body)
   }
 
-  // `as T` é uma asserção deliberada: a resposta de rede é `unknown` em tempo
-  // de execução e nenhum tipo estático pode garantir seu formato. Os services
-  // que precisam de garantia real validam o corpo com Zod (ver
-  // features/products/services). Documentamos o formato esperado nos tipos.
+  // `as T` é uma asserção, não uma garantia: nenhum tipo estático sabe o que
+  // chegou pela rede. Por isso os services pedem `unknown` e validam o corpo
+  // com Zod antes de devolvê-lo à aplicação (ver features/*/services).
   return body as T
 }
 
-/** Açúcar sintático para os verbos mais usados. */
+/** A API pública do módulo: um método por verbo HTTP. */
 export const http = {
   get: <T>(path: string, options?: Omit<RequestOptions, 'method' | 'body'>) =>
     request<T>(path, { ...options, method: 'GET' }),

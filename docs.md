@@ -57,7 +57,7 @@ foram **descartadas**.
 | React                          | 19         | Biblioteca de interface                 |
 | TypeScript                     | 6          | Tipagem estática                        |
 | Vite                           | 8          | Servidor de desenvolvimento e build     |
-| React Router                   | 7          | Rotas                                   |
+| React Router                   | 8          | Rotas (modo "data router")              |
 | React Hook Form + Zod          | 7 / 4      | Formulários e validação                 |
 | TanStack Query                 | 5          | Estado de servidor (cache, invalidação) |
 | Zustand                        | 5          | Estado global da sessão                 |
@@ -67,21 +67,22 @@ foram **descartadas**.
 
 Estado de **servidor** (produtos, categorias) vive no cache do TanStack Query,
 com invalidação após cada mutação; estado de **sessão** vive numa store Zustand
-persistida. O porquê de cada um — e o que existia no lugar deles antes — está em
+persistida. O porquê de cada um — e as alternativas descartadas — está em
 [Decisões arquiteturais](#20-decisões-arquiteturais).
 
 ### Arquitetura em uma frase
 
 Código organizado **por feature** (auth, products), apoiado em camadas
-compartilhadas (`components`, `lib`, `hooks`), com uma direção de dependência
-única: features usam o compartilhado, o compartilhado nunca usa features.
+compartilhadas (`components`, `lib`, `hooks`, `config`), com uma direção de
+dependência única — `app → features → compartilhado` — cobrada pelo ESLint, e
+não só por combinado.
 
 ---
 
 ## 2. Pré-requisitos
 
-- **Node.js 20.19+ ou 22.12+** (exigência do Vite 8). O projeto foi desenvolvido
-  e validado no Node 25.8.1.
+- **Node.js 22.22 ou mais novo** (exigência do React Router 8; o Vite 8 pede
+  20.19+/22.12+). O projeto foi desenvolvido e validado no Node 25.8.1.
 - **npm 10+** (vem com o Node). Pode usar pnpm ou yarn; os comandos abaixo usam npm.
 - Um editor com suporte a TypeScript — o VS Code já vem pronto.
 
@@ -94,7 +95,7 @@ npm -v
 
 > **Node 25 e os testes:** o Node 25 expõe um `localStorage` global próprio que
 > conflita com o ambiente de testes. O projeto já contorna isso em
-> `src/test/setup.ts` — veja a explicação lá. Nada a fazer da sua parte; se
+> `src/test/polyfills.ts` — veja a explicação lá. Nada a fazer da sua parte; se
 > aparecer o aviso `--localstorage-file was provided without a valid path` ao
 > rodar os testes, é só ruído do Node e pode ser ignorado.
 
@@ -159,40 +160,42 @@ Entre com uma das contas exibidas na tela de login:
 src/
 ├── app/                  Composição da aplicação (o "centro")
 │   ├── App.tsx           Providers + router
-│   ├── router.tsx        Tabela de rotas
-│   ├── paths.ts          Constantes de URL
-│   └── guards/           RequireAuth, RequirePermission
+│   ├── router.tsx        Tabela de rotas (e o loader que resolve a sessão)
+│   ├── guards/           RequireAuth, RequirePermission
+│   └── layout/           AppLayout (cabeçalho + navegação + <Outlet/>)
 │
 ├── components/           UI compartilhada, SEM regra de negócio
 │   ├── ui/               Button, Field (Input, Textarea, Select), Alert,
 │   │                     Badge, Spinner, ConfirmDialog, Pagination,
 │   │                     LinkButton, FileDropzone, ProgressBar
-│   ├── feedback/         LoadingState, ErrorState, EmptyState, ErrorBoundary
-│   └── layout/           AppLayout (cabeçalho + navegação + <Outlet/>)
+│   └── feedback/         LoadingState, FullPageLoading, ErrorState,
+│                         EmptyState, ErrorBoundary
 │
 ├── config/
-│   └── env.ts            Variáveis de ambiente validadas com Zod
+│   ├── env.ts            Variáveis de ambiente validadas com Zod
+│   └── paths.ts          Constantes de URL (ROUTES)
 │
 ├── features/             O CORAÇÃO: código organizado por domínio
 │   ├── auth/
-│   │   ├── components/   AuthGate, LoginForm
+│   │   ├── components/   LoginForm
 │   │   ├── pages/        LoginPage
 │   │   ├── schemas/      login.schema.ts
-│   │   ├── services/     auth.service, jwt
+│   │   ├── services/     auth.service.ts
 │   │   ├── store/        auth.store (Zustand + persist)
 │   │   ├── types/        auth.types.ts
 │   │   └── permissions.ts
 │   └── products/
-│       ├── components/   ProductCard, ProductFilters, ProductForm
+│       ├── components/   ProductCard, ProductFilters, ProductForm,
+│       │                 ProductImageField
 │       ├── hooks/        useProducts, useProductMutations, product-keys,
-│       │                 useProductFilters
+│       │                 useProductFilters, useImageUpload
 │       ├── pages/        List, Detail, Create, Edit
 │       ├── schemas/      product.schema.ts
 │       ├── services/     products.service.ts
 │       └── types/        product.types.ts
 │
-├── hooks/                Hooks genéricos (useDebouncedValue)
-├── lib/                  Infraestrutura sem React específico do domínio
+├── hooks/                Hooks genéricos (useDebouncedValue, useFlashNotice)
+├── lib/                  Infraestrutura, sem nada específico do domínio
 │   ├── http/             client, errors, auth-bridge, upload
 │   ├── query/            query-client (config do TanStack Query)
 │   ├── format.ts
@@ -200,7 +203,8 @@ src/
 │
 ├── pages/                Páginas que não pertencem a feature alguma
 │                         (NotFound, Forbidden, RouteError)
-├── test/                 Infraestrutura de teste (MSW, fixtures, helpers)
+├── test/                 Infraestrutura de teste (MSW, fixtures, helpers,
+│                         polyfills do jsdom)
 ├── index.css
 └── main.tsx              Ponto de entrada
 ```
@@ -209,10 +213,10 @@ src/
 
 | Pasta         | Entra                                          | Não entra                                      |
 | ------------- | ---------------------------------------------- | ---------------------------------------------- |
-| `app/`        | Composição, rotas, guardas                     | Regra de negócio, componentes visuais          |
+| `app/`        | Composição: rotas, guardas, layout             | Regra de negócio, chamadas de API              |
 | `components/` | UI reutilizável e genérica                     | Chamadas de API, regra de domínio              |
-| `config/`     | Leitura e validação de ambiente                | Qualquer lógica de aplicação                   |
-| `features/`   | Tudo de um domínio: UI, hooks, services, tipos | Código usado por outras features               |
+| `config/`     | Ambiente validado e constantes de URL          | Qualquer lógica de aplicação                   |
+| `features/`   | Tudo de um domínio: UI, hooks, services, tipos | Código de outra feature (exceto ler a sessão)  |
 | `hooks/`      | Hooks genéricos, sem domínio                   | Hook que menciona "produto" ou "usuário"       |
 | `lib/`        | Infraestrutura: HTTP, log, formatação          | Qualquer `import` vindo de `features/`         |
 | `pages/`      | Telas transversais (404, 403)                  | Telas de um domínio (essas ficam na feature)   |
@@ -235,8 +239,11 @@ Exemplos reais deste projeto:
 - `Pagination` foi para `components/ui` porque só recebe números e devolve
   eventos — qualquer listagem futura usa igual.
 - `useDebouncedValue` foi para `hooks/` porque funciona com qualquer valor.
-- `buttonStyles.ts` nasceu quando o segundo componente (`LinkButton`) precisou da
-  mesma aparência do `Button`. Antes disso, não existia.
+- `useImageUpload` ficou em `features/products/hooks` porque aplica as regras
+  de imagem **do produto** (formatos e tamanho). Sobe para `hooks/` se outra
+  feature precisar do mesmo fluxo.
+- `buttonStyles.ts` existe porque **dois** componentes (`Button` e `LinkButton`)
+  precisam da mesma aparência. Com um só, as classes morariam dentro dele.
 
 ### Como evitar um `components/` global com tudo misturado
 
@@ -244,12 +251,12 @@ O erro clássico é jogar todo componente novo em `components/`. Antes de fazer
 isso, pergunte: **este componente cita o domínio?** Se ele menciona produto,
 pedido ou usuário — no nome, nas props ou nos textos —, ele pertence à feature.
 
-Note também que `components/` está dividido em `ui/`, `feedback/` e `layout/`.
-Trinta arquivos soltos numa pasta só é o que torna uma pasta inútil.
+Note também que `components/` está dividido em `ui/` e `feedback/`. Trinta
+arquivos soltos numa pasta só é o que torna uma pasta inútil.
 
 ### Como evitar dependências circulares
 
-Uma regra e um padrão.
+Uma regra, uma exceção e um padrão.
 
 **A regra — as setas apontam para um lado só:**
 
@@ -257,8 +264,34 @@ Uma regra e um padrão.
 app/  →  features/  →  components/, hooks/, lib/, config/
 ```
 
-`lib/` **nunca** importa de `features/`. `components/` **nunca** importa de
-`features/`. Uma feature **não** importa de outra feature.
+`lib/`, `components/`, `hooks/` e `config/` **nunca** importam de `features/`
+nem de `app/`. Uma feature **não** importa de outra feature, nem de `app/`.
+
+Consequências práticas, visíveis no projeto:
+
+- o `AppLayout` mora em `app/layout`, e não em `components/`, porque mostra o
+  usuário logado e o botão "Sair" — ou seja, conhece `features/auth`;
+- as constantes de URL (`ROUTES`) moram em `config/paths.ts`: todas as camadas
+  precisam delas, então elas ficam na camada que todas podem importar.
+
+**A exceção — `auth` é transversal.** Saber quem é o usuário e o que ele pode
+fazer interessa a toda feature, então qualquer uma pode **ler** a sessão
+(`useCurrentUser`, `useHasPermission`). O contrário não vale: `auth` não
+conhece `products`. Numa base maior, o passo seguinte seria mover a sessão para
+`lib/` e deixar em `features/auth` só as telas de login.
+
+**Quem cobra a regra é o ESLint**, não a boa vontade do time. O
+`eslint.config.js` usa `no-restricted-imports` para cada camada; um import na
+direção errada aparece em vermelho no editor, com a explicação:
+
+```
+'@/features/auth/store/auth.store' import is restricted from being used by a
+pattern. Código compartilhado (components, config, hooks, lib) não pode
+depender de features, pages ou app
+```
+
+Regra que só existe no documento é quebrada em silêncio no primeiro prazo
+apertado.
 
 **O padrão — inversão de dependência quando a seta precisaria voltar:**
 
@@ -270,7 +303,8 @@ A solução está em `lib/http/auth-bridge.ts`: a camada HTTP **declara o contra
 do que precisa** (`getAccessToken`, `refreshSession`, `onSessionExpired`) e a
 **store de autenticação** se **registra** nesse contrato — no escopo do módulo,
 não num efeito, porque a store não depende da árvore React. A camada HTTP nunca
-importa a feature: só conhece a interface.
+importa a feature: só conhece a interface. É a mesma ideia dos _interceptors_
+do Axios: a biblioteca não conhece a sua autenticação, você a registra de fora.
 
 ### Como evitar componentes gigantes
 
@@ -281,7 +315,22 @@ faz em uma frase sem usar "e". As saídas, na ordem de preferência:
    faz isso é `useProductFilters`.
 2. **Extraia um pedaço da UI.** O `ProductCard` saiu da listagem.
 3. **Extraia uma função auxiliar** para o mesmo arquivo, quando ela só serve ali
-   (`toFormValues` na `ProductEditPage`, `useFlashNotice` na `ProductListPage`).
+   (`toFormValues` na `ProductEditPage`, `describeLoginError` no `LoginForm`).
+
+### Sem `useMemo`/`useCallback` "por via das dúvidas"
+
+Você não vai encontrar memoização manual neste projeto, e é de propósito.
+`useMemo` e `useCallback` são **otimizações**: custam leitura, exigem um array
+de dependências correto e só se pagam quando há um problema medido (um cálculo
+realmente caro, uma lista enorme re-renderizando). Montar um objeto de filtros
+ou criar uma função a cada render não é esse problema.
+
+O caminho atual, quando o desempenho importa, nem é escrever isso à mão: o
+**React Compiler** memoiza componentes e hooks automaticamente no build. Ele
+não está ligado aqui para manter a cadeia de build mínima, mas as regras de
+lint dele já estão ativas (`eslint-plugin-react-hooks`), então o código é
+compatível. Para ligar, veja a seção "React Compiler" do README do
+`@vitejs/plugin-react`.
 
 ---
 
@@ -293,10 +342,10 @@ O caminho que um dado percorre, da URL até a tela:
 Navegador
    ↓  usuário acessa /products
 Router (app/router.tsx)
-   ↓  casa a URL com uma rota
+   ↓  no boot, o loader da rota raiz resolve a sessão; depois casa a URL
 RequireAuth (app/guards)
    ↓  há sessão? Não → /login | Sim → segue
-AppLayout (components/layout)
+AppLayout (app/layout)
    ↓  desenha cabeçalho e navegação, renderiza <Outlet/>
 ProductListPage (features/products/pages)
    ↓  decide O QUE mostrar (loading / erro / vazio / dados)
@@ -336,14 +385,31 @@ mudança viraria uma caçada.
    persist os grava no localStorage        (auth.store)
 7. GET /auth/me com o token                (auth.service)  ← obrigatório!
 8. Usuário (com o PAPEL) vai para a store  (auth.store)
-9. status vira 'authenticated'
-10. RequireAuth libera a rota
-11. LoginPage redireciona para o destino original
+9. LoginPage, que assina a store, re-renderiza
+   e redireciona para o destino original   (<Navigate>)
 ```
 
 **Por que o passo 7 existe?** Porque `/auth/login` **não devolve o papel do
 usuário** — e sem papel não dá para decidir o que ele pode fazer. O papel só
 vem de `/auth/me`. Confirmado inspecionando a API real.
+
+**Repare no passo 9:** o formulário não chama `navigate()`. Ele só faz o login;
+quem navega é a página, **reagindo** à store. O mesmo vale para o "Sair": o
+botão apenas limpa a store, e o `<RequireAuth>` redireciona sozinho. Uma única
+fonte da verdade (a sessão) decide onde o usuário está — não há dois lugares
+para manter em sincronia.
+
+### O estado da sessão é mínimo
+
+```ts
+user: AuthUser | null // nunca persistido
+tokens: AuthTokens | null // persistido
+sessionExpired: boolean // só para o aviso na tela de login
+```
+
+Não existe `isAuthenticated` guardado: "estar logado" é o mesmo que "há um
+usuário", então é **derivado** (`useIsAuthenticated` lê `user !== null`).
+Guardar os dois abriria espaço para divergirem.
 
 ### Restaurar a sessão depois de um F5
 
@@ -351,25 +417,30 @@ O token sobrevive ao recarregamento (está no `localStorage`), mas os dados do
 usuário não — eles estavam apenas na memória do JavaScript. Por isso, no boot:
 
 1. o middleware `persist` reidrata os tokens do `localStorage` — de forma
-   **síncrona**, antes do primeiro render;
-2. o `merge` da store calcula o `status` a partir disso: sem token,
-   `unauthenticated` (sem requisição nenhuma); com token, `loading`;
-3. o `<AuthGate>` chama `/auth/me` para descobrir de quem é o token;
-4. se falhar, limpa tudo e vai para `unauthenticated`.
+   **síncrona**, assim que o módulo da store é carregado;
+2. o **loader da rota raiz** (`app/router.tsx`) chama `restoreSession()`;
+3. sem token, ela retorna na hora (nenhuma requisição); com token, chama
+   `/auth/me` para descobrir de quem ele é;
+4. se falhar, limpa tudo e o usuário começa no login.
 
-**O detalhe que evita um bug clássico:** enquanto isso acontece, o `<AuthGate>`
-renderiza uma tela de "Verificando sessão..." e **não renderiza a aplicação**. Se renderizasse, o `RequireAuth` veria "não autenticado" (a
-resposta ainda não chegou), mandaria o usuário para o login, e um instante
-depois a sessão seria restaurada — aquele _flash_ de tela de login a cada F5.
+**O detalhe que evita um bug clássico:** o router só renderiza as rotas depois
+que o loader termina. Enquanto isso mostra o `hydrateFallbackElement`
+("Carregando aplicação..."). Se as rotas renderizassem antes, o `RequireAuth`
+veria "sem usuário" (a resposta ainda não chegou), mandaria para o login, e um
+instante depois a sessão seria restaurada — aquele _flash_ de tela de login a
+cada F5.
 
-Por isso o estado da sessão é uma máquina de três estados, e não um booleano:
+Por que um loader e não um componente com `useEffect`? Porque resolver a sessão
+não é assunto de render: é um passo que precisa acontecer **antes** dele. Um
+loader é uma função comum, roda uma vez por navegação inicial (sem a chamada
+dupla do `StrictMode`), e se lançar erro cai no `errorElement` da rota.
 
-```ts
-type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'
-```
-
-Com `isLoading` + `isAuthenticated` separados, o estado inicial seria
-indistinguível de "deslogado". Com três valores, esse erro é impossível.
+> **Trade-off assumido:** qualquer falha em `/auth/me` encerra a sessão — até
+> uma queda de rede bem na hora do F5. É a política mais simples e nunca deixa
+> o app preso. Com um backend próprio valeria separar "token recusado" (desloga)
+> de "rede/5xx" (mantém o token e oferece nova tentativa). Aqui não dá: a
+> DummyJSON responde **500** para token malformado, então os dois casos são
+> indistinguíveis. Está comentado em `restoreSession`.
 
 ### Usando no componente
 
@@ -383,10 +454,10 @@ const logout = useAuthStore((state) => state.logout)
 ```
 
 Cada hook assina **uma fatia**: o componente só re-renderiza quando aquele valor
-muda — diferente do Context, em que qualquer mudança no objeto do Provider
-re-renderizava todos os consumidores.
+muda — diferente do Context, em que qualquer mudança no valor do Provider
+re-renderiza todos os consumidores.
 
-Fora de um componente (na camada HTTP, por exemplo) vale
+Fora de um componente (no loader do router e na camada HTTP) vale
 `useAuthStore.getState()`, que não depende da árvore React.
 
 ### Expiração de sessão
@@ -405,8 +476,8 @@ Depois de 1 minuto, a próxima requisição recebe 401 e o cliente HTTP:
 3. a requisição original é **repetida** com o token novo;
 4. o usuário não percebe nada.
 
-Se o refresh também falhar, `onSessionExpired()` limpa a sessão, e a tela de
-login exibe _"Sua sessão expirou por inatividade"_.
+Se o refresh também falhar, `onSessionExpired()` limpa a sessão, o
+`<RequireAuth>` redireciona, e a tela de login exibe _"Sua sessão expirou"_.
 
 Duas proteções importantes, ambas cobertas por teste:
 
@@ -418,10 +489,9 @@ Duas proteções importantes, ambas cobertas por teste:
 ### Logout
 
 `logout()` limpa a store, e o `persist` apaga os tokens do `localStorage` em
-seguida. A DummyJSON **não tem endpoint de
-logout**; num backend real, aqui haveria um `POST /auth/logout` para **revogar**
-o refresh token no servidor. Sem revogação, um refresh token roubado continua
-valendo até expirar.
+seguida. A DummyJSON **não tem endpoint de logout**; num backend real, aqui
+haveria um `POST /auth/logout` para **revogar** o refresh token no servidor.
+Sem revogação, um refresh token roubado continua valendo até expirar.
 
 ### Por que Zustand (e não Context API)
 
@@ -462,7 +532,7 @@ cada requisição.
 
 ### Claims deste projeto
 
-As claims da DummyJSON (verificadas):
+As claims da DummyJSON (verificadas decodificando um token real):
 
 ```json
 {
@@ -470,6 +540,9 @@ As claims da DummyJSON (verificadas):
   "username": "emilys",
   "email": "emily.johnson@x.dummyjson.com",
   "firstName": "Emily",
+  "lastName": "Johnson",
+  "gender": "female",
+  "image": "https://dummyjson.com/icon/emilys/128",
   "iat": 1789318760,
   "exp": 1789320560
 }
@@ -479,11 +552,25 @@ As claims da DummyJSON (verificadas):
 - `exp` = quando expira.
 
 Ambos em **segundos** desde 1970 — enquanto `Date.now()` devolve
-**milissegundos**. Confundir os dois é um erro silencioso de 1000x; veja
-`getExpiresAt` em `features/auth/services/jwt.ts`.
+**milissegundos**. Confundir os dois é um erro silencioso de 1000x: para
+comparar, use `exp * 1000`.
 
 Repare no que **não** está nas claims: `role`. Por isso o papel vem de
 `/auth/me`.
+
+### O frontend trata o token como texto opaco
+
+Este projeto **não decodifica o JWT em lugar nenhum**: guarda o token e o
+devolve no header `Authorization`, e só. Não precisa de mais nada — quem é o
+usuário vem de `/auth/me`, e a expiração é descoberta do jeito mais confiável
+que existe: o servidor responde 401.
+
+Para **ver** as claims enquanto estuda, cole o token em jwt.io ou rode no
+console do navegador:
+
+```js
+JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+```
 
 ### Access token x refresh token
 
@@ -563,7 +650,7 @@ As rotas são **aninhadas**, e as guardas são rotas-mãe que renderizam
 `<Outlet/>` (o lugar onde a rota filha aparece):
 
 ```
-(raiz sem path)            ← errorElement + fallback de carregamento
+(raiz sem path)            ← loader da sessão + errorElement + fallback
   /login                   pública
   <RequireAuth>            ← exige sessão para tudo abaixo
     <AppLayout>            ← cabeçalho e navegação
@@ -576,22 +663,38 @@ As rotas são **aninhadas**, e as guardas são rotas-mãe que renderizam
 A vantagem: **uma página nova criada dentro do ramo protegido já nasce
 protegida**. Não existe o risco de esquecer de embrulhá-la numa guarda.
 
+As guardas são **componentes que leem a store**, então são reativas: quando a
+sessão muda (logout, expiração), elas re-renderizam e redirecionam sem ninguém
+chamar `navigate`.
+
 ### A rota raiz sem `path`
 
-Ela não corresponde a URL nenhuma — serve só para agrupar, e existe por dois
-motivos concretos:
+Ela não corresponde a URL nenhuma — serve para agrupar, e concentra três coisas
+que valem para a aplicação inteira:
 
-1. **`hydrateFallbackElement`** — como as páginas usam `lazy`, na primeira carga
-   o router precisa baixar o chunk antes de conseguir renderizar. Sem um
-   fallback não há nada para mostrar nesse intervalo, e o React Router avisa no
-   console: _"No `HydrateFallback` element provided to render during initial
-   hydration"_. Com ele, o usuário vê um "Carregando aplicação...".
-2. **`errorElement`** — declarado uma vez, vale para a árvore inteira, já que os
+1. **`loader`** — resolve a sessão **antes do primeiro render** (ver
+   [Restaurar a sessão](#restaurar-a-sessão-depois-de-um-f5)). Vem acompanhado
+   de `shouldRevalidate: () => false`, porque por padrão o router re-executa
+   loaders em certas navegações, e a sessão só precisa ser resolvida no boot.
+2. **`hydrateFallbackElement`** — o que aparece enquanto o loader roda e o
+   chunk `lazy` da primeira rota é baixado: um "Carregando aplicação...".
+3. **`errorElement`** — declarado uma vez, vale para a árvore inteira, já que os
    erros sobem até o ancestral mais próximo que saiba tratá-los.
 
 > `app/router.tsx` exporta o **array `routes`** além do `router`. Isso permite
 > que os testes montem a mesma tabela com `createMemoryRouter` — sem isso, eles
 > validariam uma árvore de rotas que não é a que roda em produção.
+
+> **Imports do React Router:** tudo vem de `react-router`; só o
+> `RouterProvider` vem de `react-router/dom`. O pacote `react-router-dom`
+> deixou de existir na v8.
+
+### Os caminhos vivem em um lugar só
+
+`config/paths.ts` exporta `ROUTES`, usado tanto para **montar links**
+(`ROUTES.productDetail(product.id)` → `/products/7`) quanto para **declarar as
+rotas** (`ROUTES.productDetail(':id')` → `/products/:id`). Renomear uma URL é
+mexer em uma linha, e o TypeScript aponta todo lugar que a usa.
 
 `RequireAuth` guarda o destino original em `location.state` antes de redirecionar,
 para que o login devolva o usuário exatamente onde ele tentou entrar.
@@ -648,13 +751,11 @@ Responsável por _quem é o usuário_ e _o que ele pode fazer_.
 | Arquivo                    | Papel                                                                               |
 | -------------------------- | ----------------------------------------------------------------------------------- |
 | `store/auth.store.ts`      | Store Zustand: sessão, login/logout, refresh, persistência (`persist`) e ponte HTTP |
-| `components/AuthGate.tsx`  | Segura o render enquanto o token salvo é revalidado                                 |
-| `services/auth.service.ts` | `/auth/login`, `/auth/me`, `/auth/refresh`                                          |
-| `services/jwt.ts`          | Decodifica claims para exibição/diagnóstico                                         |
+| `services/auth.service.ts` | `/auth/login`, `/auth/me`, `/auth/refresh`, com as respostas validadas              |
 | `permissions.ts`           | Tabela papel → permissões e a função `can()`                                        |
 | `components/LoginForm.tsx` | O formulário                                                                        |
-| `pages/LoginPage.tsx`      | Layout, redirecionamentos, contas de demonstração                                   |
-| `types/auth.types.ts`      | `AuthUser`, `AuthTokens` e a máquina `AuthStatus`                                   |
+| `pages/LoginPage.tsx`      | Layout, redirecionamento, contas de demonstração                                    |
+| `types/auth.types.ts`      | `Role`, `AuthUser`, `AuthTokens`, `LoginCredentials`                                |
 
 **Permissões:**
 
@@ -681,7 +782,9 @@ O CRUD e a listagem.
 | `hooks/useProductMutations.ts`  | Criar, editar e excluir — e a invalidação de cache de cada um |
 | `hooks/product-keys.ts`         | Fábrica hierárquica das chaves de cache                       |
 | `hooks/useProductFilters.ts`    | Filtros sincronizados com a query string                      |
+| `hooks/useImageUpload.ts`       | Validar, pré-visualizar e enviar uma imagem                   |
 | `components/ProductForm.tsx`    | Formulário usado por criar **e** editar                       |
+| `components/ProductImageField`  | Campo de imagem (só apresentação; o estado vem do formulário) |
 | `components/ProductFilters.tsx` | Busca (com debounce), categoria, ordenação                    |
 | `components/ProductCard.tsx`    | Item da listagem                                              |
 | `pages/*`                       | Lista, detalhe, criação, edição                               |
@@ -759,8 +862,16 @@ desabilitar com aviso a aceitar o filtro e ignorá-lo silenciosamente.
 **5. Não existe endpoint de logout**, portanto não há revogação de token no
 servidor.
 
-**6. As respostas de POST/PUT não são produtos completos** — ecoam apenas os
-campos enviados mais o `id`. Por isso há um esquema Zod separado para elas.
+**6. As respostas de POST/PUT não são produtos completos.** O POST ecoa os
+campos enviados mais o `id`; o PUT devolve o produto pela metade (sem `tags`,
+`availabilityStatus` e outros). Por isso há um esquema Zod separado para elas,
+que exige só o `id`.
+
+**7. Token malformado devolve 500, não 401.** `GET /auth/me` com um token que
+nem é um JWT responde `500 { "message": "invalid token" }`. Token **expirado**
+responde 401 normalmente. É o que impede o app de distinguir "token ruim" de
+"servidor fora do ar" ao restaurar a sessão (ver
+[Autenticação](#restaurar-a-sessão-depois-de-um-f5)).
 
 ### A segunda API: upload de arquivos
 
@@ -792,13 +903,20 @@ A UI raciocina em páginas — que é o que o usuário vê.
 
 ### Validação das respostas
 
-Os esquemas Zod deste projeto foram **verificados contra a API real** (todos os
-194 produtos, além de login, `/auth/me`, refresh, busca e categorias). Se a API
-mudar de formato, o app falha com uma mensagem clara em vez de propagar
-`undefined`.
+Uma anotação de tipo TypeScript é apagada no build e não garante nada sobre o
+que chega pela rede. Por isso o cliente HTTP devolve `unknown` para os services,
+e cada service valida a resposta com Zod antes de entregá-la ao app.
 
-Para reverificar, faça uma chamada e valide com o esquema de
-`features/products/schemas/product.schema.ts`.
+Os esquemas deste projeto foram **verificados contra a API real** (todos os
+194 produtos, além de login, `/auth/me`, refresh, busca e categorias). Se a API
+mudar de formato, a falha acontece no service, com o campo exato apontado no
+console — em vez de um `undefined` explodir três telas depois. Para o usuário
+aparece uma mensagem genérica; o detalhe técnico vai para o log (ver
+[Tratamento de erros](#15-tratamento-de-erros)).
+
+A regra geral: **valide nas bordas** — o que o usuário digita (formulário) e o
+que a rede devolve (service). Entre funções internas, quem garante o formato é
+o TypeScript.
 
 ---
 
@@ -812,7 +930,7 @@ de mexer.
 | --------------- | ------------------------- | --------------------------------------------------- |
 | **Local**       | `useState` no componente  | Diálogo de exclusão aberto; texto digitado na busca |
 | **De URL**      | Query string / parâmetros | Filtros, página, ordenação, id do produto           |
-| **Global**      | Store Zustand             | Usuário autenticado e status da sessão              |
+| **Global**      | Store Zustand             | Usuário autenticado e tokens                        |
 | **De servidor** | Cache do TanStack Query   | Produtos, categorias                                |
 | **Derivado**    | Calculado no render       | `totalPages`, `isAuthenticated`, `hasActiveFilters` |
 
@@ -824,7 +942,10 @@ nenhum.
 
 **De URL** — os filtros da listagem. Este estado descreve _o que está sendo
 mostrado_, e na URL ele ganha três coisas que o `useState` não dá: sobrevive ao
-F5, pode ser compartilhado por link, e o botão "voltar" do navegador o desfaz.
+F5, pode ser compartilhado por link, e o botão "voltar" do navegador desfaz a
+troca de página, de categoria ou de ordenação. (A busca é a exceção: ela
+**substitui** a entrada do histórico, senão cada pausa na digitação criaria uma
+entrada nova.)
 
 > Repare no caso da busca: existem **dois** estados. O texto _digitado_ é local
 > (muda a cada tecla, não interessa a mais ninguém); o texto _buscado_ está na
@@ -844,9 +965,23 @@ revalidação — e de alguém que os marque como obsoletos depois de uma escrit
 É por isso que **não** moram na store global: sincronizar cópia e original à mão
 é o trabalho que a biblioteca de server state faz melhor.
 
-**Derivado** — `totalPages` é calculado de `total` e `pageSize` a cada render.
-Guardá-lo num `useState` criaria uma segunda fonte da verdade, capaz de divergir.
-**Se dá para calcular, calcule.**
+**Derivado** — `totalPages` é calculado de `total` e `pageSize` a cada render;
+`isAuthenticated` é só `user !== null`; `isUploading` sai do `status` do upload.
+Guardar qualquer um deles num `useState` criaria uma segunda fonte da verdade,
+capaz de divergir. **Se dá para calcular, calcule.**
+
+### Estados que se excluem: um union, não vários booleanos
+
+O envio de imagem (`useImageUpload`) tem um `status` com quatro valores:
+
+```ts
+type UploadStatus = 'idle' | 'uploading' | 'success' | 'error'
+```
+
+Com `isUploading` + `isSuccess` + `hasError` separados existiriam oito
+combinações, e a maioria não faz sentido ("enviando" e "com erro" ao mesmo
+tempo?). Com um union, os estados inválidos são **impossíveis de representar**
+— e o TypeScript cobra que todo `if` considere os quatro.
 
 ### O que NÃO está na store global
 
@@ -871,19 +1006,24 @@ clica em Salvar → handleSubmit valida TUDO
    ↓ válido
 mutação trava novo envio (isPending) + botão desabilitado
    ↓
-service valida de novo e chama a API
+service chama a API e valida a RESPOSTA
    ↓                         ↓ erro: Alert no topo, dados digitados PERMANECEM
    ↓ sucesso
-navega para a lista com mensagem de sucesso
+o cache é invalidado e a página navega levando a mensagem de sucesso
 ```
+
+A mensagem de sucesso viaja no estado da navegação
+(`navigate(url, { state: { notice } })`) e a tela de destino a lê com
+`useFlashNotice` (`src/hooks`), que também a apaga do histórico — senão o aviso
+reapareceria a cada F5.
 
 ### Por que React Hook Form + Zod
 
 **React Hook Form** mantém os campos **não controlados** (lê o valor do DOM via
 `ref`). Com `useState` por campo, cada tecla re-renderiza o formulário inteiro —
 irrelevante com dois campos, decisivo com vinte. Ele também já traz o que sempre
-se reimplementa à mão: estado de "enviando", campos tocados, foco no primeiro
-campo inválido.
+se reimplementa à mão: campos tocados, "há alterações?" (`isDirty`), foco no
+primeiro campo inválido.
 
 **Zod** descreve a regra uma vez, e o tipo do formulário sai dela:
 
@@ -892,11 +1032,12 @@ export const productFormSchema = z.object({ title: z.string().min(3, '...'), ...
 export type ProductFormValues = z.infer<typeof productFormSchema>
 ```
 
-Formulário e tipo **não têm como divergir**. O mesmo esquema ainda valida as
-respostas da API.
+Formulário e tipo **não têm como divergir**. E é a mesma ferramenta que valida
+as respostas da API.
 
-Custo honesto: duas dependências (~13 KB gzip). Vale porque formulários são o
-coração de um app administrativo.
+Custo honesto: duas dependências, cerca de 30 kB gzip somadas (medido no build
+deste projeto: ~15 kB do Zod, ~15 kB do React Hook Form com o resolver). Vale
+porque formulários são o coração de um app administrativo.
 
 ### Detalhes que importam
 
@@ -922,8 +1063,11 @@ das piores experiências possíveis. Coberto por teste.
 `<label for>`, `aria-invalid`, `aria-describedby` e `role="alert"`. Encapsular
 isso é o que garante que nenhuma tela esqueça.
 
+**"Desfazer alterações".** Aparece só quando `isDirty`, e devolve todos os
+campos — inclusive a imagem — aos valores iniciais. Coberto por teste.
+
 **Upload de imagem.** O formulário de produto tem um campo de arquivo com
-prévia, barra de progresso e arrastar-e-soltar. Ele usa `Controller` do React
+prévia, barra de progresso e arrastar-e-soltar. Ele usa `useController` do React
 Hook Form em vez de `register` — porque o valor não vem de um input nativo, e
 sim do upload. Tem seção própria: [Upload de arquivos](#14-upload-de-arquivos).
 
@@ -962,21 +1106,35 @@ mais comum, e evita que o usuário espere o envio depois de clicar em "Salvar".
 Em troca, o formulário precisa **bloquear o envio enquanto a imagem sobe** —
 senão o produto seria criado sem imagem e o usuário juraria ter anexado.
 
+### Onde mora o estado do upload
+
+Duas partes da tela dependem dele: o **campo de imagem** (prévia, progresso,
+erro) e o **botão "Salvar"** (que trava durante o envio). Estado usado por dois
+componentes mora no ancestral comum — então quem chama `useImageUpload` é o
+`<ProductForm>`, que repassa o resultado ao `<ProductImageField>` por props.
+
+A alternativa tentadora é deixar o hook dentro do campo e fazê-lo "avisar" o
+formulário com um `useEffect` que chama `onUploadingChange(isUploading)`.
+Funciona, mas é o tipo de efeito que a documentação do React pede para evitar:
+dois estados espelhados, um render a mais e um `useCallback` obrigatório só
+para o efeito não disparar à toa. **Efeito é para sincronizar com algo fora do
+React** (rede, DOM, URL), não para um componente conversar com o pai.
+
 ### Por que `XMLHttpRequest` e não `fetch`
 
 Este é o único lugar do projeto que não usa `fetch`, e o motivo é concreto:
 
-> **`fetch` não reporta progresso de ENVIO.** Ele expõe o corpo da _resposta_
-> como stream (progresso de download), mas o corpo da _requisição_ sobe sem
-> emitir evento nenhum.
+> **`fetch` não tem evento de progresso de ENVIO.** Ele expõe o corpo da
+> _resposta_ como stream (progresso de download), mas o corpo da _requisição_
+> sobe sem emitir evento nenhum.
 
-Não é limitação da nossa implementação — é da API do `fetch`. O
-`XMLHttpRequest`, mais antigo, expõe `xhr.upload.onprogress`, e continua sendo a
-forma de fazer barra de progresso de upload.
+Dá para contornar enviando um `ReadableStream` como corpo e contando os bytes
+lidos, mas isso só funciona em parte dos navegadores e exige HTTP/2. O
+`XMLHttpRequest`, mais antigo, expõe `xhr.upload.onprogress` em todos — e
+continua sendo a forma portável de fazer barra de progresso de upload.
 
-É exatamente o caso citado nas decisões arquiteturais como motivo legítimo para
-considerar o Axios: ele usa XHR por baixo justamente por isso. Resolvemos com
-~40 linhas em `lib/http/upload.ts`, sem dependência nova.
+É o motivo de o Axios usar XHR por baixo no navegador. Resolvemos com um módulo
+pequeno, `lib/http/upload.ts`, sem dependência nova.
 
 Detalhe fácil de errar: `xhr.upload.onprogress` mede o **envio**;
 `xhr.onprogress` (sem o `.upload`) mede o **download da resposta** — que aqui é
@@ -1086,7 +1244,7 @@ padrão do navegador é recusar o drop; sem isso, soltar o arquivo faz a página
 navegar até ele — e o usuário perde tudo que já preencheu.
 
 A barra de progresso usa `role="progressbar"` com `aria-valuenow`, e a conclusão
-é anunciada por `aria-live="polite"`. Uma `<div>` que só fica mais larga é
+é anunciada por um `role="status"`. Uma `<div>` que só fica mais larga é
 invisível para quem não enxerga.
 
 ### Limitações verificadas
@@ -1138,11 +1296,15 @@ Erros viram **tipos**, não strings. Comparar mensagens para tomar decisão é
 frágil; `instanceof` + código é explícito e o TypeScript estreita o tipo.
 
 ```
-AppError                  base
+AppError                  base — a mensagem é sempre um texto NOSSO, para o usuário
 ├── NetworkError          não houve resposta (offline, DNS, CORS)
 ├── HttpError             houve resposta, status fora de 2xx (tem .status)
 └── SessionExpiredError   sessão acabou e não deu para renovar
 ```
+
+Qualquer outro erro (um `ZodError` de resposta fora do formato, um `TypeError`
+de um bug) **não** é um `AppError` — e essa diferença é usada de propósito logo
+abaixo.
 
 ### Como um erro atravessa a aplicação
 
@@ -1163,6 +1325,12 @@ ErrorState          →  getErrorMessage(error) traduz para o usuário
 Cada camada faz **uma** coisa: o cliente HTTP classifica, o hook guarda, a
 página decide o que mostrar, o componente traduz.
 
+Como o TanStack Query **captura** o erro e o guarda no estado da query, nada
+apareceria no console. Por isso `lib/query/query-client.ts` registra dois
+callbacks globais (`QueryCache.onError` e `MutationCache.onError`) que mandam
+toda falha de dados para o `logger` — um ponto só, em vez de um `catch` com
+`console.error` em cada tela.
+
 ### Os tipos de erro e o que fazemos com cada um
 
 | Erro                 | Origem                  | Tratamento                                    |
@@ -1178,9 +1346,17 @@ página decide o que mostrar, o componente traduz.
 ### Por que não `alert("Deu erro")` em todo componente
 
 Porque o usuário merece saber **o que fazer**. `getErrorMessage()` centraliza a
-tradução (o texto é consistente em todo o app e nenhum stack trace vaza), e
-`isRetryable()` decide se faz sentido oferecer "Tentar novamente": num 404 a
-requisição continuará inválida — oferecer retry é enganar o usuário.
+tradução, com uma regra simples:
+
+- é um `HttpError`? mensagem por status (401, 403, 404, 5xx);
+- é outro `AppError`? a mensagem dele, que nós escrevemos para o usuário;
+- **qualquer outra coisa**? _"Ocorreu um erro inesperado."_ — a mensagem
+  original foi escrita para desenvolvedores (a de um `ZodError` é um JSON com a
+  lista de campos inválidos) e vai para o log, não para a tela.
+
+Já `isRetryable()` decide se faz sentido oferecer "Tentar novamente" (e se o
+TanStack Query repete a busca sozinho): num 404 a requisição continuará
+inválida — oferecer retry é enganar o usuário.
 
 ### Erros de renderização
 
@@ -1188,10 +1364,10 @@ Um erro durante o render desmonta a árvore inteira e deixa a **página branca**
 o pior resultado possível. Duas redes de segurança, porque cobrem caminhos
 diferentes:
 
-- **`RouteErrorPage`** (`errorElement` do router) — falhas dentro de uma rota,
-  inclusive falha ao carregar um _chunk_ lazy (comum após um deploy novo);
-- **`ErrorBoundary`** — falhas fora do router, como no `AuthGate` ou no
-  `QueryClientProvider`.
+- **`RouteErrorPage`** (`errorElement` do router) — falhas dentro de uma rota:
+  no render, num loader, ou ao carregar um _chunk_ lazy (comum após um deploy
+  novo);
+- **`ErrorBoundary`** — falhas fora do router, como num provider.
 
 Nenhum dos dois captura erros em `onClick` ou em código assíncrono — é por isso
 que a camada HTTP tem o próprio tratamento.
@@ -1218,7 +1394,7 @@ npm run test:watch    # modo observador (use enquanto desenvolve)
 npm test -- client    # só os arquivos que casam com "client"
 ```
 
-**47 testes em 9 arquivos**, todos passando.
+**50 testes em 9 arquivos**, todos passando.
 
 ### A forma da suíte: o "Testing Trophy"
 
@@ -1265,18 +1441,20 @@ teste** — nenhum teste depende da internet.
   (sem chamar a API com o formulário vazio); restauração de sessão (F5) e
   logout; token expirado com refresh falhando → login com aviso; 403 para o
   papel somente leitura em criar e editar; 404 fora da área autenticada.
-- **Listagem** (4): carregando → produtos; ação de criar por papel; busca de
+- **Listagem** (5): carregando → produtos; ação de criar por papel; busca de
   ponta a ponta (campo → debounce → URL → parâmetros da API → vazio → "Limpar
-  filtros" → catálogo de volta); erro + tentar novamente.
-- **Detalhe** (7): id da URL; 404 e id inválido sem "tentar novamente"; ações
-  por papel; confirmação antes de excluir, voltando à lista com o aviso; erro
-  na exclusão.
-- **Criar e editar** (8): criação completa com upload (prévia local, "Salvar"
+  filtros" → catálogo de volta); paginação (página da interface → `skip` da
+  API); erro + tentar novamente.
+- **Detalhe** (8): id da URL; 404 e id inválido sem "tentar novamente";
+  resposta fora do formato sem vazar detalhe técnico; ações por papel;
+  confirmação antes de excluir, voltando à lista com o aviso; erro na exclusão.
+- **Criar e editar** (9): criação completa com upload (prévia local, "Salvar"
   bloqueado enquanto a imagem sobe, números e URL da imagem no corpo enviado);
   validação e acessibilidade das mensagens, sem chamar a API; erro da API sem
   perder o digitado; imagem grande ou de formato inválido recusada **sem chamar
   a rede**; falha no upload; remoção com liberação do object URL; edição
-  partindo dos dados atuais e mantendo a imagem existente.
+  partindo dos dados atuais, mantendo a imagem existente e mostrando o aviso no
+  detalhe; "Desfazer alterações" devolvendo campos e imagem ao início.
 - **Cliente HTTP** (5): `skipAuth`; `HttpError` e `NetworkError`;
   _single-flight_ (um só refresh para várias requisições com 401, e todas
   repetidas); sem loop infinito quando o 401 persiste; query string sem
@@ -1306,10 +1484,10 @@ não vale um teste.
 1. Crie o arquivo **ao lado do código**: `MinhaCoisa.test.tsx`.
 2. Precisa de rede? Use os handlers padrão de `src/test/handlers.ts`, ou
    sobrescreva só para o seu caso com `server.use(...)`.
-3. Renderize com `renderApp('/sua/rota', { as: 'admin' })`. O `as` semeia uma
-   sessão com o papel indicado, reproduzindo o mesmo caminho de um F5 (o
-   `<AuthGate>` valida o token em `/auth/me`); sem ele, o teste começa como
-   visitante. O helper monta um `QueryClient` **novo a cada teste**:
+3. Renderize com `renderApp('/sua/rota', { as: 'admin' })`. O `as` semeia os
+   tokens na store, reproduzindo o mesmo caminho de um F5 (o loader da rota
+   raiz valida o token em `/auth/me`, de onde sai o papel); sem ele, o teste
+   começa como visitante. O helper monta um `QueryClient` **novo a cada teste**:
    compartilhar o cache faria um teste servir dado ao seguinte, sem tocar no
    MSW, e a ordem de execução passaria a importar.
 4. Prefira um teste que percorra o caminho do usuário (digita, clica, vê o
@@ -1318,7 +1496,19 @@ não vale um teste.
 5. Busque elementos por **papel acessível** (`getByRole`) ou **rótulo**
    (`getByLabelText`), não por classe CSS. Se não achar por papel, geralmente a
    acessibilidade está faltando — o teste acabou de encontrar um bug real.
-6. Use `findBy*` (assíncrono) para o que aparece depois de uma requisição.
+6. Use `findBy*` (assíncrono) para o que aparece depois de uma requisição — e
+   para o **primeiro** elemento de qualquer teste, já que a aplicação só
+   renderiza depois que o loader da sessão e o chunk da rota terminam.
+
+### O ambiente de teste
+
+`vite.config.ts` carrega dois arquivos antes de cada teste, **nesta ordem**:
+
+1. `src/test/polyfills.ts` — cobre o que falta no jsdom (`<dialog>`,
+   `localStorage` no Node 25, object URLs rastreáveis). Vem primeiro porque a
+   store de sessão lê o `localStorage` no instante em que é importada;
+2. `src/test/setup.ts` — liga o MSW e, depois de cada teste, desmonta a árvore
+   e devolve a store ao estado inicial (`useAuthStore.getInitialState()`).
 
 ### E os testes end-to-end?
 
@@ -1349,8 +1539,9 @@ para o menos provável, e **confirme cada hipótese** antes de mudar código.
      `https://dummyjson.com`, **sem barra no final**.
 2. **Deu 200 mas não entrou?** Olhe a requisição seguinte, `GET /auth/me`. O
    login só termina quando ela responde — é dela que vem o papel do usuário.
-3. **Console** → algum erro do Zod como `invalid_type`? A API mudou de formato;
-   o esquema em `auth.service.ts` aponta o campo exato.
+3. **Console** → um `[error] Falha ao gravar dados` com um `ZodError`
+   (`invalid_type`...)? A API mudou de formato; o erro aponta o campo exato, e
+   o esquema correspondente está em `auth.service.ts`.
 
 ### "A API retorna 401"
 
@@ -1373,6 +1564,9 @@ para o menos provável, e **confirme cada hipótese** antes de mudar código.
 O `isLoading` só volta a `false` quando a promessa **resolve ou rejeita**. Se
 ficou preso, uma destas é a causa:
 
+0. **Preso em "Carregando aplicação..."?** Isso é o boot: o loader da sessão
+   ou o chunk da primeira rota não terminou. Veja na Network se `GET /auth/me`
+   ou um arquivo `.js` está pendente.
 1. **A requisição nunca saiu.** Network vazia → o hook não disparou. Veja se
    `enabled` está `false` (ex.: `useProduct` com id `NaN` porque a URL tem
    `/products/abc`).
@@ -1404,7 +1598,8 @@ ficou preso, uma destas é a causa:
 
 - **React DevTools** (extensão) — inspecione props e estado. Para o cache de
   servidor, o equivalente é o `@tanstack/react-query-devtools` (não instalado
-  aqui); para a sessão, `useAuthStore.getState()` no console.
+  aqui); para a sessão, DevTools → Application → Local Storage →
+  `catalogo.auth` mostra os tokens salvos.
   A aba _Profiler_ mostra o que re-renderizou e por quê.
 - **Network** — filtre por Fetch/XHR. É onde 80% dos bugs de app aparecem.
 - **`VITE_ENABLE_DEBUG_LOGS=true`** — liga os `logger.debug` do projeto.
@@ -1454,13 +1649,15 @@ Nunca escreva a interface à mão ao lado do esquema: um dia os dois divergem.
 ```ts
 export const ordersService = {
   async list(signal?: AbortSignal): Promise<Order[]> {
-    const response = await http.get<unknown>('/orders', { ...(signal ? { signal } : {}) })
+    const response = await http.get<unknown>('/orders', { signal })
     return z.array(orderSchema).parse(response)
   },
 }
 ```
 
-Sem React aqui. É o que permite testá-lo sem renderizar nada.
+Sem React aqui. Pedimos `unknown` ao cliente HTTP e só devolvemos o dado depois
+de o Zod confirmar o formato; o `signal` é o que permite ao TanStack Query
+cancelar a requisição.
 
 ### 4. Hook
 
@@ -1517,7 +1714,7 @@ botão novo.**
 
 ### 7. Rota
 
-Em `app/paths.ts`:
+Em `config/paths.ts`:
 
 ```ts
 orders: '/orders',
@@ -1528,7 +1725,7 @@ Em `app/router.tsx`, **dentro** do ramo do `AppLayout` (assim já nasce protegid
 
 ```tsx
 {
-  path: 'orders',
+  path: ROUTES.orders,
   lazy: async () => {
     const { OrderListPage } = await import('@/features/orders/pages/OrderListPage')
     return { Component: OrderListPage }
@@ -1539,14 +1736,19 @@ Em `app/router.tsx`, **dentro** do ramo do `AppLayout` (assim já nasce protegid
 Precisa de permissão? Envolva com `<RequirePermission permission="order:read" />`
 e adicione a permissão em `features/auth/permissions.ts`.
 
-Adicione o link no menu em `components/layout/AppLayout.tsx`.
+Adicione o link no menu em `app/layout/AppLayout.tsx`.
+
+> A feature nova pode importar de `components/`, `hooks/`, `lib/`, `config/` e
+> de `features/auth` (para ler a sessão). Se ela importar de
+> `features/products` ou de `app/`, o `npm run lint` acusa — é a regra de
+> dependência sendo cobrada.
 
 ### 8. Testes
 
 Handlers em `src/test/handlers.ts` (ou `server.use(...)` no próprio teste) e um
 arquivo `OrderListPage.test.tsx` cobrindo, no mínimo, **sucesso, vazio e erro**.
 
-### 9 a 11. Verifique
+### 9. Verifique
 
 ```bash
 npm run lint
@@ -1557,8 +1759,8 @@ npm run dev     # e teste na mão: feliz, vazio, erro, e com papéis diferentes
 
 ### Checklist da feature nova
 
-- [ ] Nenhum `import` de outra feature
-- [ ] Nenhuma chamada HTTP fora do service
+- [ ] Nenhum `import` de outra feature (exceto ler a sessão em `features/auth`)
+- [ ] Nenhuma chamada HTTP fora do service, e toda resposta validada com Zod
 - [ ] Os quatro estados tratados
 - [ ] Tipos inferidos do esquema, sem `any`
 - [ ] Rota dentro do ramo protegido
@@ -1578,7 +1780,7 @@ a causa** e garantir que ele não volte.
 Antes de qualquer coisa, faça o bug acontecer **na sua máquina, de propósito**.
 Escreva os passos exatos:
 
-> Logado como `oliviaw`, abrir `/products/5`, clicar em Excluir → nada acontece.
+> Logado como `oliviaw`, abrir `/products/5` → o botão Excluir não aparece.
 
 Se não consegue reproduzir, ainda não tem um bug: tem um relato. Pergunte
 navegador, papel do usuário, URL exata e o que apareceu na tela.
@@ -1709,24 +1911,40 @@ está trocando.
   também **fora da árvore React**, pelo cliente HTTP.
 - **Alternativas:** prop drilling, Context, Zustand, Redux Toolkit.
 - **Decisão:** uma store Zustand com o middleware `persist`.
-- **Histórico honesto:** este projeto começou com Context API, e o raciocínio
-  era defensável — o estado global real é **um usuário e um status**, que mudam
-  2 ou 3 vezes por sessão. Três coisas fizeram a balança virar:
+- **Por que não Context API:** para um usuário e um par de tokens, que mudam 2
+  ou 3 vezes por sessão, Context seria defensável. Três coisas pesam contra:
   1. **re-render em bloco:** o valor do Context é um objeto só, então qualquer
-     mudança re-renderizava todos os consumidores. Com seletores
+     mudança re-renderiza todos os consumidores. Com seletores
      (`useAuthStore(s => s.user)`), cada componente assina uma fatia;
-  2. **estado preso à árvore:** para o cliente HTTP ler o token era preciso
-     duplicar o valor num módulo à parte. `useAuthStore.getState()` funciona em
-     qualquer lugar — é o que permite registrar a ponte HTTP no escopo do
-     módulo, e não num efeito que só roda depois do primeiro render;
-  3. **persistência escrita à mão:** havia um `token-storage.ts` só para ler e
-     gravar no `localStorage`. O middleware `persist` faz isso, incluindo a
+  2. **estado preso à árvore:** o cliente HTTP e o loader do router rodam fora
+     de componentes e não conseguem ler um Context — seria preciso duplicar o
+     token num módulo à parte. `useAuthStore.getState()` funciona em qualquer
+     lugar;
+  3. **persistência escrita à mão:** com Context, ler e gravar o `localStorage`
+     seria código nosso. O middleware `persist` faz isso, incluindo a
      reidratação síncrona no boot.
 - **Por que não Redux Toolkit:** traria store, slices, reducers e um Provider
-  para gerenciar um objeto e quatro ações. O ganho (DevTools com _time-travel_,
-  middlewares) não se paga neste tamanho.
-- **Trade-off:** uma dependência nova (~1 KB gzip) e um estado global que vive
-  fora do React — o que exige resetá-lo entre testes (`resetAuthStore()`).
+  para gerenciar três campos e cinco ações. O ganho (DevTools com
+  _time-travel_, middlewares) não se paga neste tamanho.
+- **Trade-off:** uma dependência a mais (~1,5 kB gzip) e um estado global que
+  vive fora do React — o que exige resetá-lo entre testes (ver
+  `src/test/setup.ts`).
+
+### Sessão resolvida num `loader`, e não num componente
+
+- **Problema:** depois de um F5 há token salvo, mas ainda não se sabe de quem
+  ele é. Renderizar as rotas antes da resposta causa o _flash_ de tela de login.
+- **Alternativas:** um componente "portão" em volta do router, com `useEffect`
+  - tela de espera; um loader na rota raiz; middleware do router.
+- **Decisão:** loader na rota raiz, com `hydrateFallbackElement`.
+- **Motivo:** é o mecanismo que o router já oferece para "espere isto antes de
+  renderizar". Sem efeito, sem trava contra a chamada dupla do `StrictMode`,
+  sem um terceiro estado "verificando" na store, e os erros caem no
+  `errorElement` que já existe.
+- **Trade-off:** acopla o boot da sessão ao router. As **guardas** continuam
+  sendo componentes (e não loaders/middleware com `redirect`) porque precisam
+  reagir a mudanças da store depois do boot — logout e expiração — sem que
+  alguém tenha de disparar uma navegação.
 
 ### `fetch` em vez de Axios
 
@@ -1737,8 +1955,10 @@ está trocando.
   (~30 linhas), JSON automático (1 linha), erro em status != 2xx (1 linha),
   baseURL (1 linha). O `fetch` é nativo: zero KB no bundle e suporte nativo a
   `AbortSignal`, que usamos para cancelar requisições.
-- **Trade-off:** escrevemos e mantemos essas ~30 linhas. **Quando eu trocaria:**
-  upload com progresso, timeout/retry declarativos complexos, navegadores antigos.
+- **Trade-off:** escrevemos e mantemos essas ~30 linhas, e o único upload com
+  progresso do projeto precisou de um módulo à parte com `XMLHttpRequest`
+  (`lib/http/upload.ts`). **Quando o Axios se paga:** muitos uploads com
+  progresso, ou uma política elaborada de timeout/retry por requisição.
 - **Nota:** o importante não é `fetch` vs Axios — é que **tudo passe por um
   ponto só**.
 
@@ -1750,25 +1970,25 @@ está trocando.
   Query, SWR.
 - **Decisão:** TanStack Query v5, configurado uma vez em
   `lib/query/query-client.ts`.
-- **Histórico honesto:** havia aqui um `useQuery` próprio de ~60 linhas, e ele
-  cumpriu o papel didático de mostrar o que uma lib de server state realmente
-  faz — cancelamento com `AbortSignal`, corrida entre respostas, ciclo de vida.
-  O que ele **não** fazia estava documentado no próprio arquivo como o sinal de
-  troca, e todos os sinais apareceram: as categorias eram buscadas de novo em
-  cada tela por falta de cache compartilhado, e uma mutação não tinha como
-  avisar a listagem de que os dados mudaram — só um F5 atualizava a tela.
-- **O que a biblioteca trouxe:** cache por chave com deduplicação,
+- **Por que não um hook próprio:** um `useQuery` caseiro com `useEffect` +
+  `useState` resolve loading, erro e cancelamento em ~60 linhas — e para aí.
+  Sem cache compartilhado, as categorias seriam buscadas de novo em cada tela;
+  sem invalidação, uma mutação não teria como avisar a listagem de que os dados
+  mudaram, e só um F5 atualizaria a tela. Buscar dados dentro de `useEffect` é
+  hoje o caminho que a própria documentação do React desaconselha.
+- **O que a biblioteca traz:** cache por chave com deduplicação,
   _stale-while-revalidate_, `keepPreviousData` na paginação, retry seletivo e,
   principalmente, **invalidação declarativa** (`invalidateQueries`) ao lado de
   cada mutação.
-- **Trade-off:** ~13 KB gzip, um modelo mental novo (chaves, `staleTime`,
-  `gcTime`) e uma configuração a mais nos testes — um `QueryClient` novo por
-  teste, senão o cache vaza de um caso para o outro.
+- **Trade-off:** ~12 kB gzip, um modelo mental novo (chaves, `staleTime`) e uma
+  configuração a mais nos testes — um `QueryClient` novo por teste, senão o
+  cache vaza de um caso para o outro.
 - **Por que não SWR:** menor e ótimo para leitura, mas mutações e invalidação
   eram justamente o que precisávamos, e aí o TanStack é mais completo.
-- **O que ficou de fora do cache:** a sessão. Ela é uma máquina de estados que
-  precisa existir **antes** de qualquer tela (as guardas de rota leem dela), e
-  mantê-la na store evita duas fontes da verdade para o mesmo usuário.
+- **O que ficou de fora do cache:** a sessão. Ela precisa existir **antes** de
+  qualquer tela (as guardas de rota leem dela) e ser lida fora do React (pelo
+  cliente HTTP); mantê-la só na store evita duas fontes da verdade para o mesmo
+  usuário.
 
 ### React Hook Form + Zod
 
@@ -1778,9 +1998,9 @@ está trocando.
 - **Motivo:** campos não controlados (menos re-render, escala para formulários
   grandes) e um esquema que é **fonte única** da validação **e** do tipo. O Zod
   ainda valida as respostas da API — a mesma ferramenta em dois lugares.
-- **Trade-off:** duas dependências (~13 KB gzip) e uma API nova para aprender.
-  Para um formulário de dois campos, `useState` bastaria — mas padronizar na
-  solução que escala evita reescrever depois.
+- **Trade-off:** duas dependências (~30 kB gzip somadas) e uma API nova para
+  aprender. Para um formulário de dois campos, `useState` bastaria — mas
+  padronizar na solução que escala evita reescrever depois.
 
 ### Tailwind CSS
 
@@ -1797,9 +2017,10 @@ está trocando.
 
 - **Problema:** persistir a sessão entre recarregamentos.
 - **Alternativas:** memória, `localStorage`, cookie `HttpOnly`.
-- **Decisão:** `localStorage`, **isolado em um único módulo**.
+- **Decisão:** `localStorage`, **isolado em um único módulo** (a store, via
+  `persist`).
 - **Motivo:** a API devolve o token no corpo JSON, e só o servidor pode criar um
-  cookie `HttpOnly`. Sem backend próprio, não há alternativa.
+  cookie `HttpOnly`. Sem backend próprio, não há alternativa que sobreviva ao F5.
 - **Trade-off:** **vulnerável a XSS**. É a decisão mais fraca do projeto, e está
   documentada como tal. Estar em um módulo só é o que torna a migração barata.
 
@@ -1819,19 +2040,28 @@ está trocando.
   camada HTTP. Ciclo.
 - **Alternativas:** passar o token em toda chamada de service; import circular;
   inversão de dependência.
-- **Decisão:** a camada HTTP declara um contrato e o a store de autenticação se registra.
+- **Decisão:** a camada HTTP declara um contrato e a store de autenticação se
+  registra nele.
 - **Motivo:** mantém a seta de dependência apontando para um lado só. Passar o
   token por parâmetro poluiria todos os services com um detalhe global.
 - **Trade-off:** um módulo com estado global — aceitável porque existe
   exatamente uma sessão por aba.
 
-### ESLint 9 (e não 10)
+### Três versões seguradas de propósito
 
-- **Problema:** o `eslint-plugin-jsx-a11y` ainda não suporta o ESLint 10.
-- **Decisão:** fixar o ESLint em `^9`.
-- **Motivo:** preferimos um conjunto de plugins coerente a forçar a instalação
-  com `--force` e conviver com avisos de peer dependency.
-- **Trade-off:** ficamos uma major atrás. Basta subir quando o plugin atualizar.
+Nem sempre "a última major" é a escolha certa: uma ferramenta só sobe quando o
+que depende dela acompanha. Situação conferida em novembro de 2026:
+
+| Ferramenta | Usamos | Existe | O que segura                                                                      |
+| ---------- | ------ | ------ | --------------------------------------------------------------------------------- |
+| ESLint     | 9      | 10     | `eslint-plugin-jsx-a11y` ainda declara suporte só até o ESLint 9                  |
+| TypeScript | 6      | 7      | `typescript-eslint` ainda exige `typescript < 6.1`                                |
+| MSW        | 2      | 3      | com a v3 os testes de upload (XHR no jsdom) quebram; migrar é um trabalho à parte |
+
+- **Motivo:** preferimos um conjunto coerente a forçar a instalação com
+  `--force` e conviver com avisos de peer dependency ou testes quebrados.
+- **Trade-off:** ficamos uma major atrás nessas três. Para conferir se já dá
+  para subir: `npm outdated` e, em seguida, `npm view <pacote> peerDependencies`.
 
 ---
 
@@ -1961,11 +2191,23 @@ poucas de propósito.
 
 ```bash
 npm audit              # vulnerabilidades conhecidas
-npm audit fix
-npm outdated
+npm audit fix          # aplica as correções que não quebram nada
+npm outdated           # o que tem versão mais nova
 ```
 
-No momento da última verificação: **0 vulnerabilidades**.
+Na última verificação (novembro de 2026), o `npm audit` aponta **7 avisos de
+severidade moderada, todos na mesma cadeia**: `typescript-eslint` → `minimatch`
+(negação de serviço ao processar um padrão de glob malicioso). Vale ler o
+relatório com critério em vez de só contar o número:
+
+- é uma dependência **de desenvolvimento** (roda no lint), não vai para o
+  bundle entregue ao usuário;
+- a correção oferecida, `npm audit fix --force`, **rebaixaria** o
+  `typescript-eslint` para uma versão antiga — pior que o problema;
+- some sozinho quando o `typescript-eslint` atualizar essa dependência.
+
+Nas dependências de produção (as que chegam ao navegador): **zero**. Confira
+com `npm audit --omit=dev`.
 
 ### Validação
 
@@ -2024,9 +2266,10 @@ SameSite`, access token curto em memória, rotação com detecção de reuso e
 11. **Testes E2E** (Playwright) nos fluxos críticos, quando houver backend real.
 12. **Acessibilidade auditada** com axe/Lighthouse, além das boas práticas já
     aplicadas.
-13. **Orçamento de bundle**: hoje o _chunk_ principal tem ~443 KB (~137 KB
-    gzip), aceitável para um painel interno. Se crescer, investigue com
-    `npx vite build --mode production` e um analisador de bundle.
+13. **Orçamento de bundle**: hoje a primeira visita baixa cerca de 155 kB de
+    JavaScript gzip (React DOM responde por ~57 deles), aceitável para um
+    painel interno. O `npm run build` lista o tamanho de cada _chunk_; se
+    crescer, investigue com um analisador de bundle.
 14. **Internacionalização**, se o público não for só de língua portuguesa. Hoje
     os textos estão no código — o que é honesto para um projeto deste tamanho.
 
@@ -2045,11 +2288,11 @@ npm run build
 npm run dev
 ```
 
-- [ ] `npm install` conclui sem erros e sem vulnerabilidades
+- [ ] `npm install` conclui sem erros (`npm audit --omit=dev` sem vulnerabilidades)
 - [ ] `npm run dev` sobe e a aplicação abre em http://localhost:5173
 - [ ] `npm run lint` passa sem erros
 - [ ] `npm run typecheck` passa sem erros
-- [ ] `npm test` — 47 testes passando
+- [ ] `npm test` — 50 testes passando
 - [ ] `npm run build` gera `dist/` com os chunks separados por rota
 - [ ] `npm run preview` serve o build e rotas profundas funcionam
 - [ ] Login com `emilys` / `emilyspass` funciona

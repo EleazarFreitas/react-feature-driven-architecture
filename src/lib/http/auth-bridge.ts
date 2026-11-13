@@ -9,8 +9,11 @@
  * SOLUÇÃO — inversão de dependência:
  *   A camada HTTP declara aqui o que ela PRECISA (um contrato). Quem sabe
  *   cumprir esse contrato (a store de sessão, `features/auth/store/auth.store.ts`)
- *   se registra no boot. O `lib/http` nunca importa nada de `features/auth`; a
- *   seta aponta só num sentido.
+ *   se registra ao ser importado. O `lib/http` nunca importa nada de
+ *   `features/auth`; a seta aponta só num sentido.
+ *
+ *   É a mesma ideia dos interceptors do Axios: a biblioteca não conhece a sua
+ *   autenticação, você a registra de fora.
  *
  * Isto é um módulo com estado global, o que normalmente evitamos. Aqui se
  * justifica: existe exatamente uma sessão por aba do navegador, e a alternativa

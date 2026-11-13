@@ -34,6 +34,19 @@ describe('detalhe do produto', () => {
     expect(screen.queryByRole('button', { name: /tentar novamente/i })).not.toBeInTheDocument()
   })
 
+  it('não vaza detalhe técnico quando a API responde fora do formato esperado', async () => {
+    // A API mudou sem avisar: o Zod recusa a resposta no service. A mensagem
+    // de um ZodError é um JSON com a lista de campos — vai para o log, não
+    // para a tela (ver getErrorMessage).
+    server.use(http.get(`${API_BASE}/products/:id`, () => HttpResponse.json({ id: 1 })))
+
+    renderApp('/products/1', { as: 'admin' })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Ocorreu um erro inesperado.')
+    expect(alert).not.toHaveTextContent(/invalid|expected/i)
+  })
+
   it.each([
     { as: 'moderator', canEdit: true },
     { as: 'user', canEdit: false },

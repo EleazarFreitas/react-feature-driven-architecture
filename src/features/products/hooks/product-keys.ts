@@ -25,11 +25,11 @@ export const productKeys = {
   lists: () => [...productKeys.all, 'list'] as const,
 
   /**
-   * O objeto de filtros entra na chave inteiro. Pode: a biblioteca serializa a
-   * chave de forma DETERMINÍSTICA (ordena as chaves do objeto), então
-   * `{ page: 1, search: '' }` e `{ search: '', page: 1 }` são a mesma entrada de
-   * cache — diferente do array de dependências do `useEffect`, que comparava por
-   * identidade e nos obrigava a listar campo por campo.
+   * O objeto de filtros entra na chave inteiro. Pode: a biblioteca compara
+   * chaves pelo CONTEÚDO (serializa de forma determinística, ordenando as
+   * propriedades), então `{ page: 1, search: '' }` e `{ search: '', page: 1 }`
+   * são a mesma entrada de cache, mesmo sendo objetos diferentes. É o oposto do
+   * array de dependências do `useEffect`, que compara por identidade.
    */
   list: (query: ProductQuery) => [...productKeys.lists(), query] as const,
 

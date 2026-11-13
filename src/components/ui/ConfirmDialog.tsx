@@ -17,7 +17,7 @@ import { Button } from './Button'
  * "prefira HTML semântico a ARIA".
  *
  * Observação: o jsdom (ambiente dos testes) ainda não implementa `showModal`;
- * há um shim mínimo em `src/test/setup.ts`.
+ * há um shim mínimo em `src/test/polyfills.ts`.
  */
 
 interface ConfirmDialogProps {

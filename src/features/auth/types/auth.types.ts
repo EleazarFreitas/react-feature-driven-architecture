@@ -10,9 +10,9 @@ export type Role = 'admin' | 'moderator' | 'user'
 /**
  * O usuário como a APLICAÇÃO o enxerga.
  *
- * /auth/me devolve ~25 campos (inclusive `password` e dados bancários falsos).
- * Modelamos só o que a UI usa: o tipo vira documentação do que realmente
- * importa, e nada de sensível circula sem necessidade pelo app.
+ * /auth/me devolve quase 30 campos (inclusive `password` e dados bancários
+ * falsos). Modelamos só o que a UI usa: o tipo vira documentação do que
+ * realmente importa, e nada de sensível circula sem necessidade pelo app.
  */
 export interface AuthUser {
   id: number
@@ -33,15 +33,3 @@ export interface LoginCredentials {
   username: string
   password: string
 }
-
-/**
- * Estado da sessão como MÁQUINA DE ESTADOS, não como booleanos soltos.
- *
- * Por que isso importa: com `isLoading` + `isAuthenticated` separados existem
- * quatro combinações, e duas não fazem sentido. Pior, o estado inicial
- * (isLoading=true, isAuthenticated=false) é indistinguível de "deslogado" —
- * e é exatamente aí que nasce o bug clássico de a rota protegida chutar o
- * usuário para o login durante um F5. Com um union de três valores, esse
- * estado é impossível de representar.
- */
-export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'

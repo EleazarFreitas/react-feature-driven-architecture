@@ -1,7 +1,7 @@
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
 import { Alert } from '@/components/ui/Alert'
+import { ROUTES } from '@/config/paths'
 
 import { LoginForm } from '../components/LoginForm'
 import { useAuthStore, useIsAuthenticated } from '../store/auth.store'
@@ -9,38 +9,36 @@ import { useAuthStore, useIsAuthenticated } from '../store/auth.store'
 /**
  * Tela de login.
  *
- * Responsabilidades da PÁGINA (e não do formulário): layout, redirecionamentos
+ * Responsabilidades da PÁGINA (e não do formulário): layout, o redirecionamento
  * e o aviso de sessão expirada. O <LoginForm> só sabe coletar credenciais e
- * avisar que deu certo. Essa separação é o que permite reaproveitar o
- * formulário noutro lugar (um modal de "sessão expirou", por exemplo) sem
- * arrastar junto a lógica de navegação.
+ * chamar o login.
  */
 export function LoginPage() {
   const isAuthenticated = useIsAuthenticated()
   const sessionExpired = useAuthStore((state) => state.sessionExpired)
-  const navigate = useNavigate()
   const location = useLocation()
 
   /**
-   * Para onde voltar depois de entrar.
+   * Para onde ir depois de entrar.
    *
    * O <RequireAuth> guarda a rota que o usuário tentou abrir em `location.state`.
    * Assim, quem clicou num link direto para /products/5 sem sessão volta para
    * /products/5 depois do login — e não para uma home genérica.
    *
-   * `state` é `unknown` no React Router: validamos o formato antes de usar, em
-   * vez de confiar num `as`. O valor vem do histórico do navegador e pode ter
-   * sido adulterado.
+   * `state` é `unknown` para nós: validamos o formato antes de usar, em vez de
+   * confiar num `as`. O valor vem do histórico do navegador, e qualquer código
+   * que navegue até aqui pode ter colocado outra coisa lá.
    */
-  const fallbackTarget = ROUTES.products
   const state: unknown = location.state
   const redirectTo =
     typeof state === 'object' && state !== null && 'from' in state && typeof state.from === 'string'
       ? state.from
-      : fallbackTarget
+      : ROUTES.products
 
-  // Já logado (ex.: digitou /login na barra de endereços): não faz sentido
-  // mostrar o formulário. `replace` evita que o botão "voltar" caia aqui de novo.
+  // Um único redirecionamento cobre os dois casos: quem ACABOU de entrar (a
+  // store ganhou um usuário e esta página re-renderizou) e quem já estava
+  // logado e digitou /login na barra de endereços. `replace` evita que o botão
+  // "voltar" caia no login de novo.
   if (isAuthenticated) {
     return <Navigate to={redirectTo} replace />
   }
@@ -53,16 +51,12 @@ export function LoginPage() {
           <p className="mt-1 text-sm text-slate-500">Entre para gerenciar os produtos</p>
         </header>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           {sessionExpired && (
-            <div className="mb-4">
-              <Alert variant="warning">
-                Sua sessão expirou por inatividade. Entre novamente para continuar.
-              </Alert>
-            </div>
+            <Alert variant="warning">Sua sessão expirou. Entre novamente para continuar.</Alert>
           )}
 
-          <LoginForm onSuccess={() => navigate(redirectTo, { replace: true })} />
+          <LoginForm />
         </div>
 
         <DemoCredentials />
@@ -79,13 +73,13 @@ export function LoginPage() {
  * Os três papéis existem para você ver a AUTORIZAÇÃO funcionando: entre como
  * `averyp` e repare que os botões de criar/editar/excluir somem.
  */
-function DemoCredentials() {
-  const accounts = [
-    { username: 'emilys', password: 'emilyspass', role: 'Administrador — cria, edita e exclui' },
-    { username: 'oliviaw', password: 'oliviawpass', role: 'Moderador — cria e edita, não exclui' },
-    { username: 'averyp', password: 'averyppass', role: 'Somente leitura' },
-  ]
+const DEMO_ACCOUNTS = [
+  { username: 'emilys', password: 'emilyspass', role: 'Administrador — cria, edita e exclui' },
+  { username: 'oliviaw', password: 'oliviawpass', role: 'Moderador — cria e edita, não exclui' },
+  { username: 'averyp', password: 'averyppass', role: 'Somente leitura' },
+]
 
+function DemoCredentials() {
   return (
     <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
       <h2 className="text-sm font-semibold text-slate-700">Contas de demonstração</h2>
@@ -94,7 +88,7 @@ function DemoCredentials() {
       </p>
 
       <ul className="mt-3 flex flex-col gap-2">
-        {accounts.map((account) => (
+        {DEMO_ACCOUNTS.map((account) => (
           <li key={account.username} className="text-xs">
             <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800">
               {account.username} / {account.password}

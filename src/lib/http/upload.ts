@@ -9,14 +9,15 @@ import { HttpError, NetworkError } from './errors'
  * Upload de arquivo com barra de progresso.
  *
  * POR QUE ESTE MÓDULO NÃO USA `fetch` (e o resto do projeto usa)?
- * Porque o `fetch` NÃO consegue reportar progresso de ENVIO. Ele expõe o corpo
- * da resposta como stream (progresso de download), mas o corpo da requisição
- * sobe sem nenhum evento. Não é limitação da nossa implementação: é da API.
+ * Porque o `fetch` não tem evento de progresso de ENVIO. Ele expõe o corpo da
+ * resposta como stream (progresso de download), mas o corpo da requisição sobe
+ * sem avisar nada. Dá para contornar enviando um `ReadableStream` como corpo,
+ * mas isso só funciona em parte dos navegadores e exige HTTP/2 — não serve
+ * para um app que precisa rodar em qualquer lugar.
  *
- * O `XMLHttpRequest` — mais antigo, e ainda a única opção para isto — expõe
- * `xhr.upload.onprogress`. É exatamente o caso citado em docs.md como motivo
- * legítimo para considerar o Axios: ele usa XHR por baixo justamente por causa
- * disso. Aqui resolvemos com ~40 linhas e sem dependência nova.
+ * O `XMLHttpRequest`, mais antigo, expõe `xhr.upload.onprogress` em todos os
+ * navegadores. É o motivo de o Axios usar XHR por baixo no browser. Aqui
+ * resolvemos com este módulo pequeno, sem dependência nova.
  *
  * POR QUE UM MÓDULO SEPARADO DE `client.ts`:
  * a mecânica é diferente em três pontos (corpo multipart, progresso, outra base
@@ -121,8 +122,6 @@ export function uploadFile(file: File, options: UploadOptions = {}): Promise<Upl
     // Falha de rede: o XHR não informa o motivo (por segurança), então só
     // sabemos que não chegou lá.
     xhr.onerror = () => reject(new NetworkError())
-
-    xhr.ontimeout = () => reject(new NetworkError())
 
     xhr.onabort = () => reject(new DOMException('Upload cancelado', 'AbortError'))
 

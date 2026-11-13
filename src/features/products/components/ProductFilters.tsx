@@ -43,7 +43,7 @@ export function ProductFilters({ filters, categories, isLoadingCategories }: Pro
   const debouncedTerm = useDebouncedValue(term, 400)
 
   /**
-   * Caminho URL → campo: se a busca mudar por fora (botão "limpar filtros",
+   * Caminho URL → campo: se a busca mudar por fora (botão "Limpar filtros",
    * botão voltar do navegador), o campo precisa acompanhar. Sem isso o input
    * continuaria exibindo um termo que já não está mais valendo.
    *
@@ -54,8 +54,8 @@ export function ProductFilters({ filters, categories, isLoadingCategories }: Pro
    * nunca pintar na tela o conteúdo desatualizado.
    *
    * Com `useEffect` o usuário chegaria a ver o valor antigo por um instante
-   * (e haveria um render a mais). É também o que a regra de lint
-   * `react-hooks/set-state-in-effect` recomenda evitar.
+   * (e haveria um render a mais) — é o que a regra de lint
+   * `react-hooks/set-state-in-effect` existe para evitar.
    */
   const [lastSearchFromUrl, setLastSearchFromUrl] = useState(query.search)
   if (query.search !== lastSearchFromUrl) {
@@ -65,12 +65,17 @@ export function ProductFilters({ filters, categories, isLoadingCategories }: Pro
 
   /**
    * Caminho campo → URL: empurra o termo quando o usuário para de digitar.
+   * Aqui o efeito é legítimo: ele sincroniza o React com algo EXTERNO (a URL).
    *
    * `debouncedTerm === term` é o que define "parou de digitar" — e é também o
-   * que impede este efeito de DESFAZER uma mudança vinda de fora. Sem essa
-   * condição, ao clicar em "Limpar filtros" a URL ficava sem busca, o campo
-   * voltava a "", mas o valor com debounce ainda era o termo antigo: o efeito
-   * via a diferença e gravava a busca de volta na URL.
+   * que impede este efeito de DESFAZER uma mudança vinda de fora. Ao clicar em
+   * "Limpar filtros", a URL fica sem busca e o campo volta a "", mas o valor
+   * com debounce ainda é o termo antigo por 400 ms. Sem essa condição o efeito
+   * veria a diferença e gravaria a busca antiga de volta na URL.
+   *
+   * `setSearch` é recriada a cada render, então este efeito roda em todo
+   * render. Tudo bem: a condição o torna inofensivo quando não há o que fazer,
+   * e isso é mais simples do que estabilizar a função com `useCallback`.
    */
   useEffect(() => {
     if (debouncedTerm === term && debouncedTerm !== query.search) setSearch(debouncedTerm)

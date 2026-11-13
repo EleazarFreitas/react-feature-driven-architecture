@@ -1,6 +1,6 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
+import { ROUTES } from '@/config/paths'
 import { type Permission } from '@/features/auth/permissions'
 import { useHasPermission } from '@/features/auth/store/auth.store'
 
@@ -8,7 +8,7 @@ import { useHasPermission } from '@/features/auth/store/auth.store'
  * Autorização por PERMISSÃO (não por papel).
  *
  * AUTENTICAÇÃO x AUTORIZAÇÃO — a distinção que este par de guardas materializa:
- *   - RequireAuth  = "quem é você?"       → sem sessão, vai para /login;
+ *   - RequireAuth       = "quem é você?"  → sem sessão, vai para /login;
  *   - RequirePermission = "você pode?"    → logado mas sem direito, vai para /403.
  *
  * Redirecionar para /login quem já está logado seria confuso ("mas eu ENTREI");
@@ -27,8 +27,6 @@ interface RequirePermissionProps {
 }
 
 export function RequirePermission({ permission }: RequirePermissionProps) {
-  // O hook lê a fatia `user` da store e aplica a regra de `permissions.ts`.
-  // A guarda não precisa conhecer o usuário — só a resposta "pode ou não pode".
   const isAllowed = useHasPermission(permission)
 
   if (!isAllowed) {

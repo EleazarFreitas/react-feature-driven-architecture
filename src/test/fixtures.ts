@@ -1,4 +1,4 @@
-import type { AuthUser, Role } from '@/features/auth/types/auth.types'
+import type { AuthTokens, AuthUser, Role } from '@/features/auth/types/auth.types'
 import type { Product } from '@/features/products/types/product.types'
 
 /**
@@ -46,16 +46,11 @@ export function makeUser(role: Role = 'admin', overrides: Partial<AuthUser> = {}
 }
 
 /**
- * Token com formato de JWT real (header.payload.signature) para os testes que
- * decodificam claims. A assinatura é inventada: nada no frontend a verifica —
- * quem valida assinatura é o backend.
+ * Par de tokens de mentira. O frontend trata o token como um texto OPACO: só o
+ * guarda e o devolve no header Authorization. Quem entende o conteúdo (e
+ * confere a assinatura) é o backend — por isso aqui não precisa ser um JWT.
  */
-export function makeJwt(expiresInSeconds = 3600): string {
-  const now = Math.floor(Date.now() / 1000)
-  const payload = { id: 1, username: 'emilys', iat: now, exp: now + expiresInSeconds }
-
-  const encode = (value: object) =>
-    btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-
-  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(payload)}.assinatura-falsa`
+export const TEST_TOKENS: AuthTokens = {
+  accessToken: 'access-token-de-teste',
+  refreshToken: 'refresh-token-de-teste',
 }

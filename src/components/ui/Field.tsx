@@ -29,8 +29,8 @@ import { useId } from 'react'
 interface FieldWrapperProps {
   id: string
   label: string
-  error?: string | undefined
-  hint?: string | undefined
+  error?: string
+  hint?: string
   children: ReactNode
 }
 
@@ -72,8 +72,8 @@ const NORMAL_BORDER = 'border-slate-300'
 
 interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
   label: string
-  error?: string | undefined
-  hint?: string | undefined
+  error?: string
+  hint?: string
 }
 
 export function Input({ label, error, hint, className = '', ...rest }: InputProps) {
@@ -94,8 +94,8 @@ export function Input({ label, error, hint, className = '', ...rest }: InputProp
 
 interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'> {
   label: string
-  error?: string | undefined
-  hint?: string | undefined
+  error?: string
+  hint?: string
 }
 
 export function Textarea({ label, error, hint, className = '', ...rest }: TextareaProps) {
@@ -116,8 +116,8 @@ export function Textarea({ label, error, hint, className = '', ...rest }: Textar
 
 interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> {
   label: string
-  error?: string | undefined
-  hint?: string | undefined
+  error?: string
+  hint?: string
   children: ReactNode
 }
 

@@ -3,9 +3,8 @@ import { LoadingState } from './LoadingState'
 /**
  * Carregamento que ocupa a tela inteira.
  *
- * Usado pelo AuthGate enquanto a sessão é verificada e pelo router enquanto o
- * primeiro chunk carrega — extraído para não duplicar esse markup nos dois
- * lugares.
+ * É o que o router mostra no boot, enquanto a sessão é resolvida e o chunk da
+ * primeira rota é baixado (ver `hydrateFallbackElement` em app/router.tsx).
  */
 export function FullPageLoading({ label }: { label: string }) {
   return (

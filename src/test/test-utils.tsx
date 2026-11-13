@@ -1,15 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, type RenderResult } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import userEvent, { type Options, type UserEvent } from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { RouterProvider, createMemoryRouter } from 'react-router-dom'
+import { createMemoryRouter } from 'react-router'
+import { RouterProvider } from 'react-router/dom'
 
 import { routes } from '@/app/router'
-import { AuthGate } from '@/features/auth/components/AuthGate'
 import { useAuthStore } from '@/features/auth/store/auth.store'
 import type { Role } from '@/features/auth/types/auth.types'
 
-import { makeJwt, makeUser } from './fixtures'
+import { makeUser, TEST_TOKENS } from './fixtures'
 import { API_BASE } from './handlers'
 import { server } from './server'
 
@@ -32,20 +32,13 @@ import { server } from './server'
  * ordem de execução passaria a importar. Uma instância por teste mantém cada
  * caso isolado e reordenável.
  *
- * As opções abaixo diferem de propósito das de produção (lib/query/query-client):
- *   - `retry: false` — com retentativa, o teste de erro esperaria os backoffs e
- *     um handler `{ once: true }` seria "corrigido" pela segunda tentativa,
- *     escondendo o estado de erro que queremos verificar;
- *   - `staleTime: 0` — cada teste quer o dado do seu próprio handler;
- *   - `refetchOnWindowFocus: false` — o jsdom dispara foco em situações que o
- *     navegador real não dispararia (ex.: `userEvent` clicando).
+ * `retry: false` difere de produção de propósito: com retentativa, o teste de
+ * erro esperaria os backoffs e um handler `{ once: true }` seria "corrigido"
+ * pela segunda tentativa, escondendo o estado de erro que queremos verificar.
  */
 export function createTestQueryClient(): QueryClient {
   return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, staleTime: 0, refetchOnWindowFocus: false },
-      mutations: { retry: false },
-    },
+    defaultOptions: { queries: { retry: false } },
   })
 }
 
@@ -53,35 +46,31 @@ interface RenderAppOptions {
   /**
    * Papel do usuário com sessão já salva. Omitido = visitante sem sessão.
    *
-   * A sessão é semeada na store com `status: 'loading'` — o mesmo estado que a
-   * reidratação do `persist` produz num F5. Assim o <AuthGate> busca /auth/me
-   * e é o caminho REAL de restauração de sessão que roda em todo teste. O papel
-   * sai da resposta desse /auth/me, como na API de verdade.
+   * Semeamos na store apenas os TOKENS — exatamente o que o `persist` reidrata
+   * num F5. Assim o loader da rota raiz busca /auth/me, e é o caminho REAL de
+   * restauração de sessão que roda em todo teste. O papel sai da resposta desse
+   * /auth/me, como na API de verdade.
    */
   as?: Role
   /** Opções do userEvent (ex.: `{ applyAccept: false }` no upload). */
-  userOptions?: Parameters<typeof userEvent.setup>[0]
+  userOptions?: Options
 }
 
 /**
  * Renderiza a aplicação inteira numa URL.
  *
- * Usa `createMemoryRouter` (o jsdom não tem a API de histórico do navegador)
- * com a MESMA tabela exportada por app/router.tsx. As páginas são `lazy`, então
- * os testes esperam com `findBy*`.
+ * Usa `createMemoryRouter` (histórico em memória, sem depender da barra de
+ * endereços) com a MESMA tabela exportada por app/router.tsx. As páginas são
+ * `lazy` e a sessão é resolvida num loader, então os testes esperam o primeiro
+ * elemento com `findBy*`.
  */
 export function renderApp(
   route: string,
   { as, userOptions }: RenderAppOptions = {},
-): RenderResult & { user: ReturnType<typeof userEvent.setup> } {
+): RenderResult & { user: UserEvent } {
   if (as !== undefined) {
-    // Mexer na store (e não no localStorage) mantém o helper imune a mudanças
-    // no formato da persistência: o `persist` grava sozinho em seguida.
-    useAuthStore.setState({
-      tokens: { accessToken: makeJwt(), refreshToken: makeJwt(86400) },
-      status: 'loading',
-      user: null,
-    })
+    useAuthStore.setState({ tokens: TEST_TOKENS })
+
     // O handler padrão de /auth/me já devolve um admin. Só sobrescrevemos para
     // os outros papéis — o que deixa um teste de admin livre para instalar o
     // próprio /auth/me (ex.: um 401) antes de chamar o renderApp.
@@ -96,12 +85,10 @@ export function renderApp(
     // `userEvent` simula interação de verdade (foco, teclas, eventos na ordem
     // correta) — mais próximo do usuário real do que `fireEvent`.
     user: userEvent.setup(userOptions),
-    // Mesma ordem de providers do app/App.tsx — se ela mudar lá, muda aqui.
+    // Mesmos providers do app/App.tsx — se mudarem lá, mudam aqui.
     ...render(
       <QueryClientProvider client={createTestQueryClient()}>
-        <AuthGate>
-          <RouterProvider router={router} />
-        </AuthGate>
+        <RouterProvider router={router} />
       </QueryClientProvider>,
     ),
   }

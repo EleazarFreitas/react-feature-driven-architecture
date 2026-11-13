@@ -29,7 +29,7 @@ interface FileDropzoneProps {
   accept: string
   onFileSelected: (file: File) => void
   disabled?: boolean
-  error?: string | undefined
+  error?: string
 }
 
 export function FileDropzone({

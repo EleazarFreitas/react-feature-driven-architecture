@@ -12,13 +12,13 @@ as alternativas descartadas.
 
 |             |                                                                         |
 | ----------- | ----------------------------------------------------------------------- |
-| Interface   | React 19, React Router 7, Tailwind CSS 4                                |
+| Interface   | React 19, React Router 8, Tailwind CSS 4                                |
 | Linguagem   | TypeScript 6 (`strict`)                                                 |
 | Build       | Vite 8                                                                  |
 | Formulários | React Hook Form 7 + Zod 4                                               |
 | Estado      | TanStack Query 5 (servidor) + Zustand 5 (sessão)                        |
 | Testes      | Vitest 4, Testing Library, MSW 2                                        |
-| Qualidade   | ESLint 9, Prettier 3                                                    |
+| Qualidade   | ESLint 9 (com regras de fronteira entre camadas), Prettier 3            |
 | API         | [DummyJSON](https://dummyjson.com) — pública, com JWT real              |
 | Upload      | [Platzi Fake Store](https://fakeapi.platzi.com) — upload multipart real |
 
@@ -30,7 +30,7 @@ descartadas — estão em [`docs.md`](./docs.md#20-decisões-arquiteturais).
 
 ## Como executar
 
-Requer **Node 20.19+ ou 22.12+**.
+Requer **Node 22.22 ou mais novo**.
 
 ```bash
 npm install
@@ -58,7 +58,7 @@ pública necessária.
 | `npm run dev`          | Servidor de desenvolvimento           |
 | `npm run build`        | Checa tipos e gera o build em `dist/` |
 | `npm run preview`      | Serve o build de produção             |
-| `npm test`             | Roda os testes (47)                   |
+| `npm test`             | Roda os testes (50)                   |
 | `npm run test:watch`   | Testes em modo observador             |
 | `npm run lint`         | ESLint                                |
 | `npm run lint:fix`     | ESLint corrigindo o automatizável     |
@@ -71,24 +71,26 @@ pública necessária.
 - **Autenticação JWT real** — login, `/auth/me`, refresh automático no 401
   (com proteção contra refresh duplicado), restauração de sessão após F5
 - **Autorização** por permissão, com rotas e ações que respeitam o papel
-- **Arquitetura por feature** com direção de dependência única e sem ciclos
-- **Camada HTTP** centralizada sobre `fetch`, com erros tipados
+- **Arquitetura por feature** com direção de dependência única, sem ciclos e
+  cobrada pelo ESLint
+- **Camada HTTP** centralizada sobre `fetch`, com erros tipados e respostas
+  validadas com Zod
 - **Quatro estados de interface** em toda tela que consome API: carregando,
   erro (com nova tentativa), vazio e sucesso
 - **Formulários** com validação, acessibilidade e proteção contra envio duplo
 - **Upload de imagem** com arrastar-e-soltar, prévia, barra de progresso real
   (via XHR, porque `fetch` não reporta progresso de envio) e validação
 - **Estado no lugar certo**: local, na URL, global, de servidor e derivado
-- **47 testes** de comportamento, quase todos de integração sobre a aplicação
+- **50 testes** de comportamento, quase todos de integração sobre a aplicação
   real, com a rede interceptada pelo MSW
 
 ## Estrutura
 
 ```
 src/
-├── app/          Composição: providers, rotas, guardas
-├── components/   UI compartilhada (ui, feedback, layout)
-├── config/       Variáveis de ambiente validadas
+├── app/          Composição: providers, rotas, guardas, layout
+├── components/   UI compartilhada (ui, feedback)
+├── config/       Variáveis de ambiente validadas e constantes de URL
 ├── features/     auth/ e products/ — o coração do projeto
 ├── hooks/        Hooks genéricos
 ├── lib/          HTTP, server state, log, formatação

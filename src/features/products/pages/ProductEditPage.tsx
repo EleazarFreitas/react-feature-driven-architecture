@@ -1,9 +1,11 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
 import { ErrorState } from '@/components/feedback/ErrorState'
 import { LoadingState } from '@/components/feedback/LoadingState'
 import { Alert } from '@/components/ui/Alert'
+import { ROUTES } from '@/config/paths'
+import { AppError } from '@/lib/http/errors'
+
 import { ProductForm } from '../components/ProductForm'
 import { useUpdateProduct } from '../hooks/useProductMutations'
 import { useProduct, useProductCategories } from '../hooks/useProducts'
@@ -22,15 +24,15 @@ import type { Product, ProductFormValues } from '../types/product.types'
  * Esperar os dados é mais simples e não tem esse problema.
  */
 export function ProductEditPage() {
-  const { id } = useParams<{ id: string }>()
+  const { id } = useParams()
   const navigate = useNavigate()
 
   const productId = Number(id)
   const productQuery = useProduct(productId)
   const categoriesQuery = useProductCategories()
 
-  // O hook invalida o detalhe e as listagens no sucesso — por isso a tela de
-  // detalhe, para onde navegamos em seguida, já mostra o dado revalidado.
+  // O hook invalida o detalhe e as listagens e ESPERA a revalidação — por isso
+  // a tela de detalhe, para onde navegamos em seguida, já abre com o dado novo.
   const updateMutation = useUpdateProduct(productId)
 
   const handleSubmit = (values: ProductFormValues) => {
@@ -48,7 +50,7 @@ export function ProductEditPage() {
   }
 
   if (!Number.isInteger(productId)) {
-    return <ErrorState error={new Error('O endereço informado não contém um id válido.')} />
+    return <ErrorState error={new AppError('O endereço informado não contém um id válido.')} />
   }
 
   // Duas requisições independentes (produto e categorias) precisam ter chegado.

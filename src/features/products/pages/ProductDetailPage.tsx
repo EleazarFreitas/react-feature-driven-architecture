@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
 import { ErrorState } from '@/components/feedback/ErrorState'
 import { LoadingState } from '@/components/feedback/LoadingState'
 import { Alert } from '@/components/ui/Alert'
@@ -9,9 +8,11 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { LinkButton } from '@/components/ui/LinkButton'
+import { ROUTES } from '@/config/paths'
 import { useHasPermission } from '@/features/auth/store/auth.store'
+import { useFlashNotice } from '@/hooks/useFlashNotice'
 import { formatCurrency, formatPercent } from '@/lib/format'
-import { getErrorMessage } from '@/lib/http/errors'
+import { AppError, getErrorMessage } from '@/lib/http/errors'
 
 import { useDeleteProduct } from '../hooks/useProductMutations'
 import { useProduct } from '../hooks/useProducts'
@@ -25,7 +26,7 @@ import { useProduct } from '../hooks/useProducts'
  * é entrada do usuário, e `/products/abc` é perfeitamente possível de digitar.
  */
 export function ProductDetailPage() {
-  const { id } = useParams<{ id: string }>()
+  const { id } = useParams()
   const navigate = useNavigate()
   const canUpdate = useHasPermission('product:update')
   const canDelete = useHasPermission('product:delete')
@@ -35,20 +36,23 @@ export function ProductDetailPage() {
   const productId = Number(id)
   const productQuery = useProduct(productId)
 
+  // Aviso deixado pela tela de edição ("Alterações enviadas...").
+  const notice = useFlashNotice()
+
+  // Estado LOCAL: só esta tela precisa saber se o diálogo está aberto.
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 
-  // Invalida as listagens no sucesso (ver hooks/useProductMutations.ts).
   const deleteMutation = useDeleteProduct(productId)
 
   const handleDelete = () => {
     if (deleteMutation.isPending) return
 
     deleteMutation.mutate(undefined, {
-      // Sem `onError`: quando falha, mantemos o usuário aqui e o diálogo aberto,
-      // e o erro aparece no Alert abaixo a partir de `deleteMutation.error`.
+      // Sem `onError`: quando falha, mantemos o usuário aqui e o erro aparece
+      // no Alert abaixo, a partir de `deleteMutation.error`.
       onSuccess: () => {
-        setIsConfirmingDelete(false)
         navigate(ROUTES.products, {
+          // `replace`: "voltar" não deve cair no detalhe de algo recém-excluído.
           replace: true,
           state: {
             notice:
@@ -56,11 +60,13 @@ export function ProductDetailPage() {
           },
         })
       },
+      // Com sucesso ou com erro, o diálogo fecha — o resultado aparece na tela.
+      onSettled: () => setIsConfirmingDelete(false),
     })
   }
 
   if (!Number.isInteger(productId)) {
-    return <ErrorState error={new Error('O endereço informado não contém um id válido.')} />
+    return <ErrorState error={new AppError('O endereço informado não contém um id válido.')} />
   }
 
   if (productQuery.isLoading) return <LoadingState label="Carregando produto..." />
@@ -77,11 +83,13 @@ export function ProductDetailPage() {
 
   return (
     <article className="flex flex-col gap-6">
-      <nav>
+      <div>
         <LinkButton to={ROUTES.products} variant="ghost" className="-ml-4">
           ← Voltar para a lista
         </LinkButton>
-      </nav>
+      </div>
+
+      {notice && <Alert variant="success">{notice}</Alert>}
 
       <div className="grid gap-8 lg:grid-cols-2">
         <img
@@ -105,6 +113,8 @@ export function ProductDetailPage() {
 
           <p className="text-sm leading-relaxed text-slate-600">{product.description}</p>
 
+          {/* <dl> é a tag para pares "termo: valor" — um leitor de tela anuncia
+              cada valor junto do rótulo a que pertence. */}
           <dl className="grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm">
             <div>
               <dt className="text-slate-500">Preço</dt>
@@ -130,7 +140,7 @@ export function ProductDetailPage() {
 
           {/* Se a exclusão falhar, o usuário precisa saber. Sem isto o clique em
               "Excluir" pareceria não ter feito nada. */}
-          {deleteMutation.error !== null && (
+          {deleteMutation.isError && (
             <Alert variant="error" title="Não foi possível excluir">
               {getErrorMessage(deleteMutation.error)}
             </Alert>
@@ -150,11 +160,7 @@ export function ProductDetailPage() {
         </div>
       </div>
 
-      {/*
-        Exclusão é destrutiva e irreversível: pedir confirmação é o mínimo.
-        O estado do diálogo é local porque só esta tela precisa dele — jogá-lo
-        num contexto global só aumentaria o acoplamento sem benefício.
-      */}
+      {/* Exclusão é destrutiva e irreversível: pedir confirmação é o mínimo. */}
       <ConfirmDialog
         open={isConfirmingDelete}
         title="Excluir produto"

@@ -1,8 +1,8 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router'
 
-import { ROUTES } from '@/app/paths'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ROUTES } from '@/config/paths'
 import { ROLE_LABELS } from '@/features/auth/permissions'
 import { useAuthStore, useCurrentUser } from '@/features/auth/store/auth.store'
 
@@ -13,11 +13,14 @@ import { useAuthStore, useCurrentUser } from '@/features/auth/store/auth.store'
  * próprio e renderiza <Outlet />, o buraco onde a rota filha aparece. O
  * cabeçalho não é desmontado a cada navegação — só o conteúdo do <Outlet> troca.
  * Isso evita "piscar" o menu e preserva o estado dos componentes do layout.
+ *
+ * POR QUE MORA EM `app/` E NÃO EM `components/`: este layout conhece a sessão
+ * (usuário, papel, logout), que é assunto de `features/auth`. Código
+ * compartilhado de `components/` não pode importar de features; quem junta
+ * features com a moldura da aplicação é a camada de composição.
  */
 export function AppLayout() {
   const user = useCurrentUser()
-  // Assinar as duas fatias separadamente: o cabeçalho não re-renderiza quando
-  // muda algo da sessão que ele não usa (o status, por exemplo).
   const logout = useAuthStore((state) => state.logout)
 
   return (
@@ -66,6 +69,8 @@ export function AppLayout() {
                 <Badge tone="brand">{ROLE_LABELS[user.role]}</Badge>
               </div>
 
+              {/* Não há `navigate('/login')` aqui: ao limpar a store, o
+                  <RequireAuth> re-renderiza e faz o redirecionamento. */}
               <Button variant="secondary" onClick={logout}>
                 Sair
               </Button>

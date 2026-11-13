@@ -25,7 +25,7 @@ dist-ssr
 
 # Env: NUNCA versione .env pessoal. Os .env.development/.env.production/.env.test
 # deste projeto contêm apenas configuração PÚBLICA (URL de API) e por isso são
-# versionados de propósito. Veja docs.md > Configuração de ambiente.
+# versionados de propósito. Veja docs.md > Segurança > Variáveis de ambiente.
 .env
 .env*.local
 

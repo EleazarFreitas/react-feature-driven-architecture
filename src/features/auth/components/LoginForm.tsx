@@ -5,8 +5,7 @@ import { useForm } from 'react-hook-form'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
-import { HttpError } from '@/lib/http/errors'
-import { getErrorMessage } from '@/lib/http/errors'
+import { getErrorMessage, HttpError } from '@/lib/http/errors'
 
 import { loginSchema, type LoginFormValues } from '../schemas/login.schema'
 import { useAuthStore } from '../store/auth.store'
@@ -21,21 +20,16 @@ import { useAuthStore } from '../store/auth.store'
  *     campos isso é irrelevante; num formulário de 20 campos é a diferença
  *     entre fluido e travado. Padronizar na solução que escala evita reescrever
  *     depois;
- *   - RHF já traz o que sempre acabamos reimplementando à mão: estado de
- *     "enviando", campos tocados, foco no primeiro campo inválido;
+ *   - RHF já traz o que sempre acabamos reimplementando à mão: campos tocados,
+ *     foco no primeiro campo inválido, valores iniciais;
  *   - Zod descreve a regra UMA vez e o tipo do formulário sai dela por
  *     inferência — formulário e tipo não têm como divergir.
  *
- * Custo honesto: duas dependências (~13 KB gzip somados). Vale porque
- * formulários são o coração de um app administrativo.
+ * O formulário NÃO navega depois do login. Ele só chama `login()`; quando a
+ * store passa a ter um usuário, a <LoginPage> re-renderiza e redireciona. Uma
+ * única fonte da verdade (a sessão) decide a navegação.
  */
-
-interface LoginFormProps {
-  /** Para onde ir após o login. Quem decide isso é a página, não o formulário. */
-  onSuccess: () => void
-}
-
-export function LoginForm({ onSuccess }: LoginFormProps) {
+export function LoginForm() {
   const login = useAuthStore((state) => state.login)
 
   const {
@@ -50,14 +44,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     mode: 'onBlur',
   })
 
-  /**
-   * `useMutation` do TanStack Query: ele cuida de "enviando" (`isPending`) e de
-   * capturar o erro (`error`) sem nenhum try/catch aqui.
-   *
-   * Repare que o callback de sucesso é passado no `mutate`, e não no hook: quem
-   * sabe o que fazer depois do login é ESTE componente, e a mutação continua
-   * ignorando o resultado quando o formulário já foi desmontado.
-   */
+  // `useMutation` cuida de "enviando" (`isPending`) e de capturar o erro
+  // (`error`), sem nenhum try/catch nem useState aqui.
   const loginMutation = useMutation({ mutationFn: login })
 
   const onSubmit = handleSubmit((values) => {
@@ -65,14 +53,14 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     // checagem cobre o envio por Enter, que o botão desabilitado não impede.
     if (loginMutation.isPending) return
 
-    loginMutation.mutate(values, { onSuccess })
+    loginMutation.mutate(values)
   })
 
   return (
     // `noValidate` desliga os balões de validação do navegador: as mensagens são
     // nossas, traduzidas e ligadas ao campo via aria-describedby.
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-      {loginMutation.error !== null && (
+      {loginMutation.isError && (
         <Alert variant="error" title="Não foi possível entrar">
           {describeLoginError(loginMutation.error)}
         </Alert>
@@ -83,15 +71,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         autoComplete="username"
         /**
          * A regra jsx-a11y/no-autofocus existe porque mover o foco sem o
-         * usuário pedir desorienta quem usa leitor de tela — o cursor "pula"
-         * para um lugar que a pessoa ainda não sabe que existe.
-         *
-         * Abrimos exceção aqui porque esta página tem UMA função e um único
-         * formulário: o foco vai para onde a pessoa iria de qualquer forma,
-         * nada é pulado no caminho, e quem usa teclado economiza os Tabs.
-         * É a exceção reconhecida da regra, não um descuido.
-         *
-         * Em qualquer tela com mais conteúdo, a regra deve ser respeitada.
+         * usuário pedir desorienta quem usa leitor de tela. Abrimos exceção
+         * aqui porque esta página tem UMA função e um único formulário: o foco
+         * vai para onde a pessoa iria de qualquer forma, e nada é pulado no
+         * caminho. Em qualquer tela com mais conteúdo, respeite a regra.
          */
         // eslint-disable-next-line jsx-a11y/no-autofocus -- ver justificativa acima
         autoFocus

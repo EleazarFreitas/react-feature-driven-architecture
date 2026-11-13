@@ -1,43 +1,41 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 
 import { registerAuthBridge } from '@/lib/http/auth-bridge'
 import { logger } from '@/lib/logger'
 
 import { can, type Permission } from '../permissions'
 import { authService } from '../services/auth.service'
-import type { AuthStatus, AuthTokens, AuthUser, LoginCredentials } from '../types/auth.types'
+import type { AuthTokens, AuthUser, LoginCredentials } from '../types/auth.types'
 
 /**
  * Sessão do usuário — store global em Zustand.
  *
- * POR QUE A SESSÃO VIVE NUMA STORE ZUSTAND:
+ * POR QUE A SESSÃO VIVE NUMA STORE ZUSTAND (e não num Context):
  *
  *   1. RE-RENDER POR FATIA: cada componente assina uma FATIA específica
  *      (`useAuthStore(s => s.user)`) e só re-renderiza quando aquela fatia
  *      muda, não quando qualquer campo da sessão muda;
  *   2. ESTADO ACESSÍVEL FORA DA ÁRVORE: `useAuthStore.getState()` funciona em
- *      qualquer lugar, inclusive fora de componentes — é o que liga a store à
- *      camada HTTP no fim deste arquivo;
- *   3. PERSISTÊNCIA DECLARATIVA: o middleware `persist` cuida de salvar e
- *      reidratar o token, incluindo a leitura no boot, sem código adicional.
+ *      qualquer lugar, inclusive fora de componentes — é o que o loader da
+ *      rota raiz e a camada HTTP usam (ver o fim deste arquivo);
+ *   3. PERSISTÊNCIA DECLARATIVA: o middleware `persist` salva e reidrata os
+ *      tokens sem código adicional.
  *
- * A máquina de estados `AuthStatus`, a decisão de buscar o papel do usuário em
- * /auth/me (o JWT da DummyJSON não traz `role`) e o aviso de segurança sobre
- * localStorage ficam documentados em types/auth.types.ts.
+ * O ESTADO É MÍNIMO de propósito. Não existe um `isAuthenticated` guardado:
+ * "estar logado" é o mesmo que "há um usuário", então é um valor DERIVADO
+ * (ver `useIsAuthenticated`). Guardar os dois abriria espaço para divergirem.
  *
  * ⚠️ PERSISTÊNCIA E SEGURANÇA: o `persist` grava em `localStorage`, legível por
  * qualquer JavaScript da página. Num backend próprio, o refresh token deveria
  * vir em cookie HttpOnly e o access token ficar só em memória. A DummyJSON
  * devolve os dois no corpo da resposta, então esta é a única opção disponível
- * aqui.
+ * aqui (ver docs.md > JWT).
  */
 
 interface AuthState {
-  /** Dados do usuário logado, ou null. */
+  /** Dados do usuário logado, ou null. Nunca é persistido. */
   user: AuthUser | null
-  /** Máquina de estados da sessão — ver AuthStatus. */
-  status: AuthStatus
   /** Único campo PERSISTIDO (ver `partialize` abaixo). */
   tokens: AuthTokens | null
   /** true quando a sessão caiu sozinha (token expirado e refresh falhou). */
@@ -46,69 +44,21 @@ interface AuthState {
   /** Lança em caso de credenciais inválidas — quem chama trata e exibe. */
   login: (credentials: LoginCredentials) => Promise<void>
   logout: () => void
-  /** Revalida o token persistido no boot. Idempotente — ver AuthGate. */
+  /** Descobre de quem é o token salvo. Chamada no boot (ver app/router.tsx). */
   restoreSession: () => Promise<void>
   /** Usada pelo cliente HTTP quando uma requisição recebe 401. */
   refreshSession: () => Promise<string | null>
   /** Sessão irrecuperável: desloga e sinaliza para a tela de login. */
   expireSession: () => void
-  clearSession: () => void
 }
 
-const INITIAL_STATE = {
-  user: null,
-  status: 'unauthenticated',
-  tokens: null,
-  sessionExpired: false,
-} satisfies Pick<AuthState, 'user' | 'status' | 'tokens' | 'sessionExpired'>
-
-/**
- * Trava contra restaurações concorrentes. Precisa viver FORA do state: o
- * StrictMode monta o AuthGate duas vezes em desenvolvimento, e sem isto o
- * /auth/me seria chamado duas vezes a cada F5.
- */
-let restoreInFlight: Promise<void> | null = null
-
-/**
- * Adaptador de `localStorage` à prova de ambiente.
- *
- * Duas razões para não entregar `window.localStorage` direto ao middleware:
- *   1. ele LANÇA EXCEÇÃO no modo privado de alguns navegadores e quando o
- *      usuário bloqueia storage. Um app que quebra inteiro por causa disso é
- *      pior do que um app que apenas não lembra a sessão;
- *   2. resolvemos `window.localStorage` a CADA chamada, e não uma vez na
- *      importação do módulo. Isso deixa o ambiente de teste livre para instalar
- *      o próprio storage (ver test/setup.ts) sem depender da ordem dos imports.
- */
-const resilientStorage: StateStorage = {
-  getItem: (name) => {
-    try {
-      return window.localStorage.getItem(name)
-    } catch (error) {
-      logger.warn('Não foi possível ler o localStorage', { name, error })
-      return null
-    }
-  },
-  setItem: (name, value) => {
-    try {
-      window.localStorage.setItem(name, value)
-    } catch (error) {
-      logger.warn('Não foi possível gravar no localStorage', { error })
-    }
-  },
-  removeItem: (name) => {
-    try {
-      window.localStorage.removeItem(name)
-    } catch (error) {
-      logger.warn('Não foi possível limpar o localStorage', { error })
-    }
-  },
-}
+const SIGNED_OUT = { user: null, tokens: null } satisfies Partial<AuthState>
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      ...INITIAL_STATE,
+      ...SIGNED_OUT,
+      sessionExpired: false,
 
       login: async (credentials) => {
         const tokens = await authService.login(credentials)
@@ -121,11 +71,11 @@ export const useAuthStore = create<AuthState>()(
           // Segunda chamada obrigatória: /auth/login NÃO devolve o papel do
           // usuário, e sem o papel não decidimos o que ele pode fazer.
           const user = await authService.getCurrentUser()
-          set({ user, status: 'authenticated', sessionExpired: false })
+          set({ user, sessionExpired: false })
         } catch (error) {
           // Token salvo mas perfil não carregado = sessão pela metade.
           // Melhor desfazer tudo e deixar o usuário tentar de novo.
-          set({ tokens: null })
+          set(SIGNED_OUT)
           throw error
         }
       },
@@ -134,31 +84,35 @@ export const useAuthStore = create<AuthState>()(
         // A DummyJSON não tem endpoint de logout. Num backend real, aqui entraria
         // um POST /auth/logout para REVOGAR o refresh token no servidor — sem
         // isso, um refresh token roubado continua valendo até expirar.
-        get().clearSession()
+        set({ ...SIGNED_OUT, sessionExpired: false })
       },
 
-      restoreSession: () => {
-        // `status` só nasce "loading" quando havia token persistido (ver `merge`).
-        // Sem token não há o que restaurar, e evitamos um /auth/me garantidamente
-        // 401.
-        if (get().status !== 'loading') return Promise.resolve()
+      restoreSession: async () => {
+        // Só há o que restaurar quando o `persist` trouxe um token de uma visita
+        // anterior e ainda não sabemos de quem ele é. Sem token, evitamos um
+        // /auth/me que responderia 401 com certeza.
+        if (get().tokens === null || get().user !== null) return
 
-        restoreInFlight ??= authService
-          .getCurrentUser()
-          .then((user) => {
-            set({ user, status: 'authenticated' })
-          })
-          .catch((error: unknown) => {
-            // Token inválido/expirado sem refresh possível: começamos deslogados.
-            // Não é um erro a mostrar, é o fim natural de uma sessão.
-            logger.debug('Não foi possível restaurar a sessão', { error })
-            get().clearSession()
-          })
-          .finally(() => {
-            restoreInFlight = null
-          })
-
-        return restoreInFlight
+        try {
+          const user = await authService.getCurrentUser()
+          set({ user })
+        } catch (error) {
+          /**
+           * Qualquer falha encerra a sessão, e o usuário começa no login.
+           *
+           * É a política mais simples e nunca deixa o app preso numa tela de
+           * erro. O custo: uma queda de rede bem na hora do F5 também desloga.
+           * Com um backend próprio valeria separar os casos — token recusado
+           * (401) desloga; rede ou 5xx mantém o token e oferece "tentar de
+           * novo". Aqui não dá: a DummyJSON responde 500 para token malformado,
+           * então os dois casos são indistinguíveis.
+           *
+           * Se o motivo foi token expirado sem refresh possível, o cliente HTTP
+           * já chamou `expireSession` — e o aviso `sessionExpired` permanece.
+           */
+          logger.debug('Não foi possível restaurar a sessão', { error })
+          set(SIGNED_OUT)
+        }
       },
 
       refreshSession: async () => {
@@ -178,43 +132,29 @@ export const useAuthStore = create<AuthState>()(
       },
 
       expireSession: () => {
-        get().clearSession()
-        set({ sessionExpired: true })
-      },
-
-      clearSession: () => {
-        set({ user: null, tokens: null, status: 'unauthenticated' })
+        set({ ...SIGNED_OUT, sessionExpired: true })
       },
     }),
     {
       name: 'catalogo.auth',
+
+      // Versão do FORMATO salvo. Se um dia ele mudar, incremente e escreva um
+      // `migrate`; sem isso o `persist` descarta o que foi salvo com outra
+      // versão (o usuário só precisa entrar de novo).
       version: 1,
-      storage: createJSONStorage(() => resilientStorage),
+
+      // `localStorage` já é o padrão do `persist`; fica explícito porque é a
+      // decisão de segurança mais importante deste arquivo. A leitura é
+      // SÍNCRONA: quando este módulo termina de carregar, os tokens salvos já
+      // estão na store.
+      storage: createJSONStorage(() => localStorage),
 
       /**
-       * Persistimos APENAS os tokens. O usuário é sempre rebuscado em /auth/me no
-       * boot: guardar o `role` no navegador seria dar a um dado de autorização
-       * uma cópia que o próprio usuário pode editar no DevTools. O `status`
-       * também fica de fora — ele é recalculado no `merge`.
+       * Persistimos APENAS os tokens. O usuário é sempre rebuscado em /auth/me
+       * no boot: guardar o `role` no navegador seria dar a um dado de
+       * autorização uma cópia que o próprio usuário pode editar no DevTools.
        */
       partialize: (state) => ({ tokens: state.tokens }),
-
-      /**
-       * A reidratação é SÍNCRONA (localStorage), então este merge roda antes do
-       * primeiro render. É o que evita o bug clássico do F5: existir token e o
-       * app renderizar por um instante como "deslogado", fazendo a rota
-       * protegida chutar o usuário para o login.
-       */
-      merge: (persisted, current) => {
-        const tokens = (persisted as { tokens?: AuthTokens | null } | null)?.tokens ?? null
-
-        return {
-          ...current,
-          tokens,
-          // Com token: "loading" até o /auth/me responder. Sem token: já sabemos.
-          status: tokens ? 'loading' : 'unauthenticated',
-        }
-      },
     },
   ),
 )
@@ -228,7 +168,8 @@ export const useAuthStore = create<AuthState>()(
  */
 export const useCurrentUser = () => useAuthStore((state) => state.user)
 
-export const useIsAuthenticated = () => useAuthStore((state) => state.status === 'authenticated')
+/** Estado derivado: "logado" é exatamente "tem usuário". */
+export const useIsAuthenticated = () => useAuthStore((state) => state.user !== null)
 
 /**
  * Autorização em forma de hook. A regra continua morando em `permissions.ts`
@@ -241,22 +182,12 @@ export const useHasPermission = (permission: Permission) =>
   useAuthStore((state) => can(state.user, permission))
 
 /**
- * Reinicia a store — usado pelos TESTES entre casos (ver test/setup.ts).
- * A store é um singleton de módulo: sem isto, o login de um teste vazaria para o
- * seguinte e os testes deixariam de ser reordenáveis.
- */
-export function resetAuthStore(): void {
-  restoreInFlight = null
-  useAuthStore.setState(INITIAL_STATE)
-}
-
-/**
  * PONTE COM A CAMADA HTTP — registrada no escopo do módulo, não num efeito.
  *
  * Como a store é um singleton que não depende da árvore React, o registro
  * acontece assim que este módulo é importado — ou seja, antes de qualquer
- * componente montar. Isso evita a janela (curta, mas real) em que uma
- * requisição poderia sair sem o header Authorization.
+ * requisição sair. Isso evita a janela (curta, mas real) em que uma chamada
+ * poderia ir sem o header Authorization.
  *
  * A direção da dependência continua a mesma: `lib/http` declara o contrato e
  * nunca importa nada de `features/auth` (ver lib/http/auth-bridge.ts).
@@ -264,7 +195,5 @@ export function resetAuthStore(): void {
 registerAuthBridge({
   getAccessToken: () => useAuthStore.getState().tokens?.accessToken ?? null,
   refreshSession: () => useAuthStore.getState().refreshSession(),
-  onSessionExpired: () => {
-    useAuthStore.getState().expireSession()
-  },
+  onSessionExpired: () => useAuthStore.getState().expireSession(),
 })
